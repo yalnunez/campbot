@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         Camp Aux Monitor by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.2.3.1
+// @version      0.9.2.4
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dani.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dani.user.js
 // @description  Monitor CAMP AUX durations, send alerts (managers + team), auto-change state - Sequential AutoClick (3.5s), System via Outage Time, Break/Lunch/Personal double-check, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, ANTI-THROTTLE
@@ -796,9 +796,10 @@ function delay(ms) {
         addStatusMessage('\u{1F501} === Cycle start ===');
 
         // ===== CHECK REFRESH STOPPED =====
-        const refreshStoppedEl = document.querySelector('a.awsui_disabled_vjswe_10957_198 span div');
-        const refreshStoppedByText = [...document.querySelectorAll('a span div')].find(el => el.textContent.trim() === 'Refresh Stopped');
-        if (refreshStoppedEl || refreshStoppedByText) {
+       const refreshStoppedEl = document.querySelector('div.awsui_child_18582_66aol_97 a.awsui_disabled_vjswe_10957_198');
+        const refreshStoppedByText = refreshStoppedEl && refreshStoppedEl.textContent.trim().includes('Refresh Stopped');
+        const isRefreshStopped = refreshStoppedEl && refreshStoppedByText;
+        if (isRefreshStopped) {
             addStatusMessage('🚨 CAMP Refresh Stopped detected!');
             GM_xmlhttpRequest({
                 method: 'POST',
