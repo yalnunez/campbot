@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         Camp Aux Monitor by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.2.2
+// @version      0.9.2.3
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dani.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dani.user.js
 // @description  Monitor CAMP AUX durations, send alerts (managers + team), auto-change state - Sequential AutoClick (3.5s), System via Outage Time, Break/Lunch/Personal double-check, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, ANTI-THROTTLE
@@ -117,7 +117,16 @@
         'On Contact': 1500,
         'UpcomingOffline': 0,
     };
-
+//===== PWD AGENTS (Extended Break: 20:15 = 1215s) =====
+const PWD_AGENTS = [
+    'roalvarz',
+    // Agregar más logins aquí
+];
+const PWD_BREAK_THRESHOLD = 1215;
+function getBreakThreshold(agentName) {
+    const login = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
+    return PWD_AGENTS.includes(login) ? PWD_BREAK_THRESHOLD : AUX_THRESHOLDS.Break;
+}
     const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
 
     let isMonitoring = false;
@@ -785,7 +794,33 @@ function delay(ms) {
         }
 
         addStatusMessage('\u{1F501} === Cycle start ===');
+// ===== CHECK REFRESH STOPPED =====
+const refreshStoppedEl = document.querySelector('a.awsui_disabled_vjswe_10957_198 span div');
+const refreshStoppedByText = [...document.querySelectorAll('a span div')].find(el => el.textContent.trim() === 'Refresh Stopped');
+if (refreshStoppedEl || refreshStoppedByText) {
+    addStatusMessage('🚨 CAMP Refresh Stopped detected!');
+    GM_xmlhttpRequest({
+        method: 'POST',
+        url: MANAGERS_WEBHOOK_URL,
+        headers: { 'Content-Type': 'application/json' },
+        data: JSON.stringify({
+            Content: `/md
+⚠️ **CAMP Connection Issue Detected**
 
+@All Members
+CAMP is showing **"Refresh Stopped"** — the metrics table is NOT updating.
+
+Please check the CAMP session and refresh if needed.
+
+Time: ${new Date().toLocaleTimeString()}`
+        }),
+        onload: (r) => { addStatusMessage(r.status < 300 ? '📤 Refresh Stopped alert sent' : '❌ Alert HTTP ' + r.status); },
+        onerror: () => { addStatusMessage('❌ Refresh Stopped alert failed'); }
+    });
+    addStatusMessage('⏳ Next cycle in 60s...');
+    monitoringTimeout = setTimeout(monitoringCycle, 60000);
+    return;
+}
         clickAgentHeader();
 
         await delay(3000);
@@ -898,7 +933,8 @@ function delay(ms) {
                 }
 
                 // ===== CHECK THRESHOLD VIOLATION =====
-                if (AUX_THRESHOLDS[state] !== undefined && effectiveDuration > AUX_THRESHOLDS[state]) {
+                const effectiveThreshold = (state === 'Break' || state === 'Break2') ? getBreakThreshold(agentName) : AUX_THRESHOLDS[state];
+if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) {
                     const shouldAutoOffline = AUTO_OFFLINE_STATES.includes(state);
 
                     if (state === 'On Contact') {
@@ -913,7 +949,7 @@ function delay(ms) {
                     allAlerts.push({
                         agent: agentName, team: cells[idx.team].textContent.trim(),
                         state, profile: cells[idx.profile].textContent.trim(),
-                        duration: effectiveDurationText, threshold: formatSeconds(AUX_THRESHOLDS[state]),
+                        duration: effectiveDurationText, threshold: formatSeconds(effectiveThreshold),
                         action: shouldAutoOffline ? 'pending' : 'N/A',
                         missedContacts: missedContactsValue
                     });
@@ -1202,3 +1238,4 @@ function delay(ms) {
 
 })();
 
+<<<
