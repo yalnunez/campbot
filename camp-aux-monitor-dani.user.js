@@ -5,7 +5,7 @@
 // @version      0.9.2.4
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dani.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dani.user.js
-// @description  Monitor CAMP AUX durations, send alerts (managers + team), auto-change state - Sequential AutoClick (3.5s), System via Outage Time, Break/Lunch/Personal double-check, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, ANTI-THROTTLE
+// @description  Monitor CAMP AUX durations, send alerts (managers + team), auto-change state - Sequential AutoClick (3.5s), System via Outage Time, Break/Lunch/Personal double-check, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, ANTI-THROTTLE, PWD CSAs included
 // @author       @yalnunez
 // @match        https://prod-iad.camp.wwcs.amazon.dev/Metrics
 // @match        https://prod-fra.camp.wwcs.amazon.dev/Metrics
