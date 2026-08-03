@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         Camp Aux Monitor by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.2.3
+// @version      0.9.2.3.1
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dani.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dani.user.js
 // @description  Monitor CAMP AUX durations, send alerts (managers + team), auto-change state - Sequential AutoClick (3.5s), System via Outage Time, Break/Lunch/Personal double-check, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, ANTI-THROTTLE
@@ -783,7 +783,7 @@ function delay(ms) {
 
     // ===== MAIN MONITORING CYCLE =====
 
-    async function monitoringCycle() {
+   async function monitoringCycle() {
         if (!isMonitoring) return;
 
         const sessionOk = await checkAndResumeSession();
@@ -794,17 +794,18 @@ function delay(ms) {
         }
 
         addStatusMessage('\u{1F501} === Cycle start ===');
-// ===== CHECK REFRESH STOPPED =====
-const refreshStoppedEl = document.querySelector('a.awsui_disabled_vjswe_10957_198 span div');
-const refreshStoppedByText = [...document.querySelectorAll('a span div')].find(el => el.textContent.trim() === 'Refresh Stopped');
-if (refreshStoppedEl || refreshStoppedByText) {
-    addStatusMessage('🚨 CAMP Refresh Stopped detected!');
-    GM_xmlhttpRequest({
-        method: 'POST',
-        url: MANAGERS_WEBHOOK_URL,
-        headers: { 'Content-Type': 'application/json' },
-        data: JSON.stringify({
-            Content: `/md
+
+        // ===== CHECK REFRESH STOPPED =====
+        const refreshStoppedEl = document.querySelector('a.awsui_disabled_vjswe_10957_198 span div');
+        const refreshStoppedByText = [...document.querySelectorAll('a span div')].find(el => el.textContent.trim() === 'Refresh Stopped');
+        if (refreshStoppedEl || refreshStoppedByText) {
+            addStatusMessage('🚨 CAMP Refresh Stopped detected!');
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: MANAGERS_WEBHOOK_URL,
+                headers: { 'Content-Type': 'application/json' },
+                data: JSON.stringify({
+                    Content: `/md
 ⚠️ **CAMP Connection Issue Detected**
 
 @All Members
@@ -813,14 +814,15 @@ CAMP is showing **"Refresh Stopped"** — the metrics table is NOT updating.
 Please check the CAMP session and refresh if needed.
 
 Time: ${new Date().toLocaleTimeString()}`
-        }),
-        onload: (r) => { addStatusMessage(r.status < 300 ? '📤 Refresh Stopped alert sent' : '❌ Alert HTTP ' + r.status); },
-        onerror: () => { addStatusMessage('❌ Refresh Stopped alert failed'); }
-    });
-    addStatusMessage('⏳ Next cycle in 60s...');
-    monitoringTimeout = setTimeout(monitoringCycle, 60000);
-    return;
-}
+                }),
+                onload: (r) => { addStatusMessage(r.status < 300 ? '📤 Refresh Stopped alert sent' : '❌ Alert HTTP ' + r.status); },
+                onerror: () => { addStatusMessage('❌ Refresh Stopped alert failed'); }
+            });
+            addStatusMessage('⏳ Next cycle in 60s...');
+            monitoringTimeout = setTimeout(monitoringCycle, 60000);
+            return;
+        }
+
         clickAgentHeader();
 
         await delay(3000);
@@ -1237,5 +1239,3 @@ if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) 
     addStatusMessage('v0.9.2 loaded - Post-dropdown verification + AWS UI Cloudscape fix');
 
 })();
-
-<<<
