@@ -1237,6 +1237,6 @@ if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) 
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.2 loaded - Post-dropdown verification + AWS UI Cloudscape fix');
+    addStatusMessage('v0.9.2.4');
 
 })();
