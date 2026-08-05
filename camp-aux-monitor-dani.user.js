@@ -120,6 +120,7 @@
 //===== PWD AGENTS (Extended Break: 20:15 = 1215s) =====
 const PWD_AGENTS = [
     'roalvarz',
+    'duqqcarl',
     // Agregar más logins aquí
 ];
 const PWD_BREAK_THRESHOLD = 1215;
