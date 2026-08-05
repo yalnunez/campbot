@@ -117,17 +117,19 @@
         'On Contact': 1500,
         'UpcomingOffline': 0,
     };
-//===== PWD AGENTS (Extended Break: 20:15 = 1215s) =====
-const PWD_AGENTS = [
-    'roalvarz',
-    'duqqcarl',
-    // Agregar más logins aquí
-];
-const PWD_BREAK_THRESHOLD = 1215;
-function getBreakThreshold(agentName) {
-    const login = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
-    return PWD_AGENTS.includes(login) ? PWD_BREAK_THRESHOLD : AUX_THRESHOLDS.Break;
-}
+
+    //===== PWD AGENTS (Extended Break: 20:15 = 1215s) =====
+    const PWD_AGENTS = [
+        'roalvarz',
+        'duqqcarl',
+        // Agregar más logins aquí
+    ];
+    const PWD_BREAK_THRESHOLD = 1215;
+    function getBreakThreshold(agentName) {
+        const login = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
+        return PWD_AGENTS.includes(login) ? PWD_BREAK_THRESHOLD : AUX_THRESHOLDS.Break;
+    }
+
     const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
 
     let isMonitoring = false;
@@ -178,42 +180,39 @@ function getBreakThreshold(agentName) {
     }
 
     // ===== ANTI-THROTTLE: Web Worker Timer =====
-// Los setTimeout en background tabs se throttlean a 60s mínimo.
-// Un Web Worker NO se throttlea, así que lo usamos para los delays.
+    // Los setTimeout en background tabs se throttlean a 60s mínimo.
+    // Un Web Worker NO se throttlea, así que lo usamos para los delays.
 
-const workerBlob = new Blob([`
-    self.onmessage = function(e) {
-        setTimeout(function() {
-            self.postMessage(e.data);
-        }, e.data.ms);
+    const workerBlob = new Blob([`
+        self.onmessage = function(e) {
+            setTimeout(function() {
+                self.postMessage(e.data);
+            }, e.data.ms);
+        };
+    `], { type: 'application/javascript' });
+
+    const workerURL = URL.createObjectURL(workerBlob);
+    const timerWorker = new Worker(workerURL);
+
+    let delayResolvers = {};
+    let delayIdCounter = 0;
+
+    timerWorker.onmessage = function(e) {
+        const id = e.data.id;
+        if (delayResolvers[id]) {
+            delayResolvers[id]();
+            delete delayResolvers[id];
+        }
     };
-`], { type: 'application/javascript' });
 
-const workerURL = URL.createObjectURL(workerBlob);
-const timerWorker = new Worker(workerURL);
-
-let delayResolvers = {};
-let delayIdCounter = 0;
-
-timerWorker.onmessage = function(e) {
-    const id = e.data.id;
-    if (delayResolvers[id]) {
-        delayResolvers[id]();
-        delete delayResolvers[id];
+    // ANTI-THROTTLE delay (NO se throttlea en background tabs):
+    function delay(ms) {
+        return new Promise(resolve => {
+            const id = ++delayIdCounter;
+            delayResolvers[id] = resolve;
+            timerWorker.postMessage({ id, ms });
+        });
     }
-};
-
-// ANTES (se throttlea en background):
-// function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-
-// DESPUÉS (NO se throttlea):
-function delay(ms) {
-    return new Promise(resolve => {
-        const id = ++delayIdCounter;
-        delayResolvers[id] = resolve;
-        timerWorker.postMessage({ id, ms });
-    });
-}
 
     function formatSeconds(s) {
         return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -373,15 +372,44 @@ function delay(ms) {
         element.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
+    // ===== SIMULATE CLICK (Enhanced for AWS UI Cloudscape - onMouseDown || onClick || onPointerDown) =====
+
     function simulateClick(element) {
         if (!element) return;
-        const reactPropsKey = Object.keys(element).find(key => key.startsWith('__reactProps$') || key.startsWith('__reactEvents$'));
-        if (reactPropsKey && element[reactPropsKey]?.onClick) {
-            try {
-                element[reactPropsKey].onClick({ preventDefault: () => {}, stopPropagation: () => {}, nativeEvent: new MouseEvent('click'), target: element, currentTarget: element, bubbles: true, type: 'click' });
-                return;
-            } catch (e) { debugLog('React handler failed:', e.message); }
+
+        // Buscar React internal props
+        const reactPropsKey = Object.keys(element).find(key =>
+            key.startsWith('__reactProps$') || key.startsWith('__reactEvents$')
+        );
+
+        if (reactPropsKey) {
+            const props = element[reactPropsKey];
+            // Cloudscape usa onMouseDown para selección de opciones en dropdowns
+            const handler = props?.onMouseDown || props?.onClick || props?.onPointerDown;
+            if (handler) {
+                try {
+                    const syntheticEvent = {
+                        preventDefault: () => {},
+                        stopPropagation: () => {},
+                        nativeEvent: new MouseEvent('mousedown'),
+                        target: element,
+                        currentTarget: element,
+                        bubbles: true,
+                        cancelable: true,
+                        type: handler === props?.onMouseDown ? 'mousedown' : 'click',
+                        button: 0,
+                        clientX: element.getBoundingClientRect().left + element.getBoundingClientRect().width / 2,
+                        clientY: element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2
+                    };
+                    handler(syntheticEvent);
+                    return;
+                } catch (e) {
+                    debugLog('React handler failed:', e.message);
+                }
+            }
         }
+
+        // Fallback: full DOM event sequence
         const rect = element.getBoundingClientRect();
         const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
         const opts = { bubbles: true, cancelable: true, view: document.defaultView, clientX: x, clientY: y, screenX: x, screenY: y };
@@ -475,8 +503,6 @@ function delay(ms) {
     }
 
     // ===== POST-DROPDOWN AGENT VERIFICATION =====
-    // After opening the dropdown, reads the Agent cell from the SAME ROW
-    // to confirm we are changing the correct agent's state.
 
     function verifyAgentFromRow(stateCell, expectedAgentName) {
         const row = stateCell.closest('tr');
@@ -627,14 +653,11 @@ function delay(ms) {
 
     async function openDropdownAndSelectState(stateCell, agentName, targetState) {
         try {
-            // Step 1: Open the dropdown
             const clickTarget = findDropdownTrigger(stateCell);
             debugLog(`Opening dropdown for ${agentName}, target: ${targetState}`);
             simulateClick(clickTarget || stateCell);
             await delay(1500);
 
-            // Step 2: POST-DROPDOWN VERIFICATION
-            // Read the Agent cell from the same row to confirm it's the correct agent
             const isCorrectAgent = verifyAgentFromRow(stateCell, agentName);
             if (!isCorrectAgent) {
                 addStatusMessage(`\u{1F6AB} WRONG AGENT: Dropdown opened for wrong row, expected ${agentName}. Closing...`);
@@ -644,10 +667,8 @@ function delay(ms) {
             }
             addStatusMessage(`\u{2705} Verified: ${agentName} confirmed before state change`);
 
-            // Step 3: Select the target state
             let success = await selectStateFromDropdown(targetState);
 
-            // Step 4: If failed, retry once
             if (!success) {
                 debugLog(`First attempt failed for ${agentName}, retrying...`);
                 closeOpenDropdown();
@@ -659,7 +680,6 @@ function delay(ms) {
                     simulateClick(retry || freshCell);
                     await delay(1500);
 
-                    // Verify again after re-opening
                     const isCorrectRetry = verifyAgentFromRow(freshCell, agentName);
                     if (!isCorrectRetry) {
                         addStatusMessage(`\u{1F6AB} WRONG AGENT on retry: expected ${agentName}. Closing...`);
@@ -672,7 +692,6 @@ function delay(ms) {
                 }
             }
 
-            // Step 5: If still failed, try one more time with mousedown
             if (!success) {
                 debugLog(`Second attempt failed for ${agentName}, trying mousedown approach...`);
                 closeOpenDropdown();
@@ -684,7 +703,6 @@ function delay(ms) {
                     simulateClick(retry2 || freshCell2);
                     await delay(1500);
 
-                    // Verify again
                     const isCorrectRetry2 = verifyAgentFromRow(freshCell2, agentName);
                     if (!isCorrectRetry2) {
                         addStatusMessage(`\u{1F6AB} WRONG AGENT on 3rd attempt: expected ${agentName}. Closing...`);
@@ -784,7 +802,7 @@ function delay(ms) {
 
     // ===== MAIN MONITORING CYCLE =====
 
-   async function monitoringCycle() {
+    async function monitoringCycle() {
         if (!isMonitoring) return;
 
         const sessionOk = await checkAndResumeSession();
@@ -797,30 +815,22 @@ function delay(ms) {
         addStatusMessage('\u{1F501} === Cycle start ===');
 
         // ===== CHECK REFRESH STOPPED =====
-       const refreshStoppedEl = document.querySelector('div.awsui_child_18582_66aol_97 a.awsui_disabled_vjswe_10957_198');
+        const refreshStoppedEl = document.querySelector('div.awsui_child_18582_66aol_97 a.awsui_disabled_vjswe_10957_198');
         const refreshStoppedByText = refreshStoppedEl && refreshStoppedEl.textContent.trim().includes('Refresh Stopped');
         const isRefreshStopped = refreshStoppedEl && refreshStoppedByText;
         if (isRefreshStopped) {
-            addStatusMessage('🚨 CAMP Refresh Stopped detected!');
+            addStatusMessage('\u{1F6A8} CAMP Refresh Stopped detected!');
             GM_xmlhttpRequest({
                 method: 'POST',
                 url: MANAGERS_WEBHOOK_URL,
                 headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({
-                    Content: `/md
-⚠️ **CAMP Connection Issue Detected**
-
-@All Members
-CAMP is showing **"Refresh Stopped"** — the metrics table is NOT updating.
-
-Please check the CAMP session and refresh if needed.
-
-Time: ${new Date().toLocaleTimeString()}`
+                    Content: `/md\n\u{26A0}\u{FE0F} **Problema de Conexión CAMP Detectado**\n\n@All Members\nCAMP está mostrando **"Refresh Stopped"** — la tabla de métricas NO se está actualizando.\n\nPor favor revisen la sesión de CAMP y refresquen si es necesario.\n\nHora: ${new Date().toLocaleTimeString()}`
                 }),
-                onload: (r) => { addStatusMessage(r.status < 300 ? '📤 Refresh Stopped alert sent' : '❌ Alert HTTP ' + r.status); },
-                onerror: () => { addStatusMessage('❌ Refresh Stopped alert failed'); }
+                onload: (r) => { addStatusMessage(r.status < 300 ? '\u{1F4E4} Refresh Stopped alert sent' : '\u{274C} Alert HTTP ' + r.status); },
+                onerror: () => { addStatusMessage('\u{274C} Refresh Stopped alert failed'); }
             });
-            addStatusMessage('⏳ Next cycle in 60s...');
+            addStatusMessage('\u{23F3} Next cycle in 60s...');
             monitoringTimeout = setTimeout(monitoringCycle, 60000);
             return;
         }
@@ -936,9 +946,9 @@ Time: ${new Date().toLocaleTimeString()}`
                     debugLog(`${agentName} Personal - Duration: ${durationText} (${duration}s) | Personal Time: ${personalTimeText} (${personalSeconds}s) | Using: ${effectiveDurationText}`);
                 }
 
-                // ===== CHECK THRESHOLD VIOLATION =====
+                // ===== CHECK THRESHOLD VIOLATION (PWD logic for Break/Break2) =====
                 const effectiveThreshold = (state === 'Break' || state === 'Break2') ? getBreakThreshold(agentName) : AUX_THRESHOLDS[state];
-if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) {
+                if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) {
                     const shouldAutoOffline = AUTO_OFFLINE_STATES.includes(state);
 
                     if (state === 'On Contact') {
@@ -1070,7 +1080,7 @@ if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) 
             addStatusMessage('\u{2705} No violations');
         }
 
-             // Send team alerts ONLY when agents were moved to Offline
+        // Send team alerts ONLY when agents were moved to Offline
         if (offlineAlerts.length > 0) {
             const missedOfflineAlerts = offlineAlerts.filter(a => a.state === 'Missed');
             const otherOfflineAlerts = offlineAlerts.filter(a => a.state !== 'Missed');
@@ -1085,8 +1095,7 @@ if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) 
             addStatusMessage(`\u{1F4E4} Team alerts: ${offlineAlerts.length} agent(s)`);
         }
 
-
-             // Send team alerts when agents were moved to Available (1st Missed)
+        // Send team alerts when agents were moved to Available (1st Missed)
         if (availableAlerts.length > 0) {
             sendTeamAlertsAvailable(availableAlerts);
             addStatusMessage(`\u{1F4E4} Team Available alerts: ${availableAlerts.length} agent(s)`);
@@ -1095,10 +1104,8 @@ if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) 
 
     // ===== WEBHOOK ALERTS =====
 
-
-
     function sendManagersAlert(alerts) {
-        const tableHeader = `**AUX Duration Alerts** - ${new Date().toLocaleTimeString()}\n\n@All Members\nWe are having high AUX usage or Missed Contact for the below CSAs. Please ensure we are monitoring AUXs closely and no CSAs are on unscheduled AUXs.\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
+        const tableHeader = `**Alertas de Duración AUX** - ${new Date().toLocaleTimeString()}\n\n@All Members\nSe detectó uso elevado de AUX o Missed Contact en los siguientes CSAs. Por favor asegúrense de monitorear los AUXs de cerca y que ningún CSA esté en AUXs no programados.\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
 
         const tableRows = alerts.map(alert => {
             const agentClean = alert.agent.replace(/@amazon.*$/i, '').trim();
@@ -1133,7 +1140,7 @@ if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) 
             }
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
             const mentions = clean.map(a => `@${a.name}`).join(' ');
-            const header = `${mentions}\n**Alert:** You were moved to **Offline** due to high AUX usage. If you are on **'Available'** status, double-check your next status stays **'Available'**.\n\n| Agent | State | Duration |\n|-------|-------|----------|`;
+            const header = `${mentions}\n**Alerta:** Fuiste movido a **Offline** por uso elevado de AUX. Si estás en estado **'Available'**, verifica que tu próximo estado se mantenga en **'Available'**.\n\n| Agent | State | Duration |\n|-------|-------|----------|`;
             const rows = clean.map(a => `| ${a.name} | ${a.state} | ${a.duration} |`).join('\n');
 
             GM_xmlhttpRequest({
@@ -1166,7 +1173,7 @@ if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) 
             if (!url) continue;
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
             const mentions = clean.map(a => `@${a.name}`).join(' ');
-            const header = `${mentions}\n**Alert:** You were moved to **Offline** due to Missed Contacts. Please go to **Available** if you are having issues please reach your **Team Manager**.\n\n| Agent | State | Missed Contacts | Duration |\n|-------|-------|--------------------|`;
+            const header = `${mentions}\n**Alerta:** Fuiste movido a **Offline** por Missed Contacts. Por favor ve a **Available**, si estás teniendo problemas contacta a tu **Team Manager**.\n\n| Agent | State | Missed Contacts | Duration |\n|-------|-------|--------------------|----------|`;
             const rows = clean.map(a => `| ${a.name} | ${a.state} | ${a.missedContacts} | ${a.duration} |`).join('\n');
 
             GM_xmlhttpRequest({
@@ -1196,7 +1203,7 @@ if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) 
             if (!url) continue;
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
             const mentions = clean.map(a => `@${a.name}`).join(' ');
-            const header = `${mentions}\n**Alert:** You were moved to **Available** due to a Missed Contact. Please make sure you are ready to take contacts. If you miss again, you will be moved to **Offline**.\n\n| Agent | State | Duration |\n|-------|-------|----------|`;
+            const header = `${mentions}\n**Alerta:** Fuiste movido a **Available** por un Missed Contact. Asegúrate de estar listo para tomar contactos. Si vuelves a fallar, serás movido a **Offline**.\n\n| Agent | State | Duration |\n|-------|-------|----------|`;
             const rows = clean.map(a => `| ${a.name} | ${a.state} | ${a.duration} |`).join('\n');
 
             GM_xmlhttpRequest({
@@ -1241,3 +1248,4 @@ if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) 
     addStatusMessage('v0.9.2.4');
 
 })();
+
