@@ -36,13 +36,6 @@ Tampermonkey automation bot that monitors agent state time in CAMP, executes aut
 
 Alerts are routed to the correct Operations Manager based on the Team column in CAMP:
 
-| OM | Team Managers |
-|----|---------------|
-| drvamzn | admatall, saaimara, sandreac, yalnunez, cvillabo, veraardi |
-| dvveland | camargis, cruizher, claraaqu, llandine, luribesa, robayotl |
-| hincapg | narancri, omariacb, jcaldani, josefrzp, jeshin, jluckert |
-| sernlaur | callealm, erasergi, humbrolo, jslvaaa, ospinabo, rdrkat |
-
 ## Installation
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) in your browser
