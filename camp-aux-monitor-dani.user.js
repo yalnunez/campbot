@@ -151,86 +151,95 @@ const BOT_OPERATOR = prompt('Ingresa tu login para iniciar Camp Aux Monitor:') |
     controls.appendChild(pauseBtn);
     controls.appendChild(autoClickBtn);
     controls.appendChild(debugBtn);
-// ===== SYSTEM ISSUE BUTTON + INPUT =====
-const systemIssueContainer = document.createElement('div');
-systemIssueContainer.style.cssText = `display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 8px; margin-top: 4px;`;
 
-const systemInput = document.createElement('input');
-systemInput.type = 'text';
-systemInput.placeholder = 'Agent login...';
-systemInput.style.cssText = `padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; color: #333;`;
+    // ===== MANUAL STATE CHANGE - INPUT + DROPDOWN + BUTTON =====
+    const manualContainer = document.createElement('div');
+    manualContainer.style.cssText = `display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 8px; margin-top: 4px;`;
 
-const systemBtn = document.createElement('button');
-systemBtn.style.cssText = `padding: 8px 15px; cursor: pointer; background: #ff8c00; color: white; border: 2px solid white; border-radius: 4px; font-weight: bold; font-size: 11px;`;
-systemBtn.textContent = '⚙️ Move to System Issue';
-systemBtn.addEventListener('click', async () => {
-    const login = systemInput.value.trim().toLowerCase();
-    if (!login) {
-        addStatusMessage('⚠️ Enter an agent login first');
-        return;
-    }
-    addStatusMessage(`⚙️ Searching for ${login}...`);
+    const manualInput = document.createElement('input');
+    manualInput.type = 'text';
+    manualInput.placeholder = 'Agent login...';
+    manualInput.style.cssText = `padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; color: #333;`;
 
-    const table = findRelevantTable();
-    if (!table) { addStatusMessage('❌ Table not found'); return; }
+    const stateSelect = document.createElement('select');
+    stateSelect.style.cssText = `padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; color: #333; background: white;`;
+    const optSystem = document.createElement('option');
+    optSystem.value = 'System';
+    optSystem.textContent = 'System Issue';
+    const optOffline = document.createElement('option');
+    optOffline.value = 'Offline';
+    optOffline.textContent = 'Offline';
+    stateSelect.appendChild(optSystem);
+    stateSelect.appendChild(optOffline);
 
-    const idx = findColumnIndexes(table);
-    const rows = table.querySelectorAll('tbody tr');
-    let targetCell = null;
-    let agentFullName = '';
+    const manualBtn = document.createElement('button');
+    manualBtn.style.cssText = `padding: 8px 15px; cursor: pointer; background: #ff8c00; color: white; border: 2px solid white; border-radius: 4px; font-weight: bold; font-size: 11px;`;
+    manualBtn.textContent = 'Change State';
+    manualBtn.addEventListener('click', async () => {
+        const login = manualInput.value.trim().toLowerCase();
+        const targetState = stateSelect.value;
+        if (!login) {
+            addStatusMessage('\u{26A0}\u{FE0F} Enter an agent login first');
+            return;
+        }
+        addStatusMessage(`\u{2699}\u{FE0F} Searching for ${login}...`);
 
-    for (const row of rows) {
-        const cells = row.querySelectorAll('td');
-        if (cells.length >= 5) {
-            const agentText = cells[idx.agent].textContent.trim();
-            const agentLogin = agentText.replace(/@amazon.*$/i, '').trim().toLowerCase();
-            if (agentLogin === login) {
-                targetCell = cells[idx.state];
-                agentFullName = agentText;
-                break;
+        const table = findRelevantTable();
+        if (!table) { addStatusMessage('\u{274C} Table not found'); return; }
+
+        const idx = findColumnIndexes(table);
+        const rows = table.querySelectorAll('tbody tr');
+        let targetCell = null;
+        let agentFullName = '';
+
+        for (const row of rows) {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 5) {
+                const agentText = cells[idx.agent].textContent.trim();
+                const agentLogin = agentText.replace(/@amazon.*$/i, '').trim().toLowerCase();
+                if (agentLogin === login) {
+                    targetCell = cells[idx.state];
+                    agentFullName = agentText;
+                    break;
+                }
             }
         }
-    }
 
-    if (!targetCell) {
-        addStatusMessage(`❌ Agent "${login}" not found in table`);
-        return;
-    }
+        if (!targetCell) {
+            addStatusMessage(`\u{274C} Agent "${login}" not found in table`);
+            return;
+        }
 
-    addStatusMessage(`⚙️ Moving ${login} to System...`);
-    const success = await openDropdownAndSelectState(targetCell, agentFullName, 'System');
-  if (success) {
-    addStatusMessage(`✅ ${login} → System Issue`);
-    logDisconnection(login, 'System', 'Manual', 'System Issue', BOT_OPERATOR);
-    systemInput.value = '';
+        addStatusMessage(`\u{2699}\u{FE0F} Moving ${login} to ${targetState}...`);
+        const success = await openDropdownAndSelectState(targetCell, agentFullName, targetState);
+        if (success) {
+            addStatusMessage(`\u{2705} ${login} \u{2192} ${targetState}`);
+            logDisconnection(login, targetState, 'Manual', targetState, BOT_OPERATOR);
+            manualInput.value = '';
 
-    // Enviar alerta al OM del operador
-    const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
-    const systemAlertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS.drvamzn;
+            // Enviar alerta al OM del operador
+            const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
+            const alertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS.drvamzn;
 
-    GM_xmlhttpRequest({
-        method: 'POST',
-        url: systemAlertUrl,
-        headers: { 'Content-Type': 'application/json' },
-        data: JSON.stringify({
-            Content: `/md
-⚙️ **System Issue Manual**
-
-**${BOT_OPERATOR}** movió a **${login}** a estado **System Issue** manualmente.
-
-Hora: ${new Date().toLocaleTimeString()}`
-        }),
-        onload: (r) => { addStatusMessage(r.status < 300 ? `\u{1F4E4} System Issue alert sent [${operatorOM || 'fallback'}]` : `\u{274C} System alert HTTP ${r.status}`); },
-        onerror: () => { addStatusMessage('\u{274C} System Issue alert failed'); }
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: alertUrl,
+                headers: { 'Content-Type': 'application/json' },
+                data: JSON.stringify({
+                    Content: `/md\n\u{2699}\u{FE0F} **Cambio Manual de Estado**\n\n**${BOT_OPERATOR}** movió a **${login}** a estado **${targetState}** manualmente.\n\nHora: ${new Date().toLocaleTimeString()}`
+                }),
+                onload: (r) => { addStatusMessage(r.status < 300 ? `\u{1F4E4} Manual change alert sent [${operatorOM || 'fallback'}]` : `\u{274C} Alert HTTP ${r.status}`); },
+                onerror: () => { addStatusMessage('\u{274C} Manual change alert failed'); }
+            });
+        } else {
+            addStatusMessage(`\u{274C} Failed to move ${login} to ${targetState}`);
+        }
     });
-} else {
-    addStatusMessage(`❌ Failed to move ${login} to System`);
-}
-});
 
-systemIssueContainer.appendChild(systemInput);
-systemIssueContainer.appendChild(systemBtn);
-controls.appendChild(systemIssueContainer);
+    manualContainer.appendChild(manualInput);
+    manualContainer.appendChild(stateSelect);
+    manualContainer.appendChild(manualBtn);
+    controls.appendChild(manualContainer);
 
     const statusDisplay = document.createElement('div');
     statusDisplay.style.cssText = `flex-grow: 1; overflow-y: auto; font-size: 11px; line-height: 1.4; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 10px; margin-top: 10px;`;
