@@ -1,11 +1,11 @@
 
 // ==UserScript==
-// @name         Dave's Aux Monitor by yalnunez
+// @name         VCS COL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.2.4
-// @updateURL    https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dave.user.js
-// @downloadURL  https://raw.githubusercontent.com/yalnunez/campbotdaniteam/main/camp-aux-monitor-dave.user.js
-// @description  Monitor CAMP AUX durations, send alerts (managers + team), auto-change state - Sequential AutoClick (3.5s), System via Outage Time, Break/Lunch/Personal double-check, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification
+// @version      0.9.2.5
+// @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
+// @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
+// @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
 // @author       @yalnunez
 // @match        https://prod-iad.camp.wwcs.amazon.dev/Metrics
 // @match        https://prod-fra.camp.wwcs.amazon.dev/Metrics
@@ -15,19 +15,83 @@
 
 (function () {
     'use strict';
+const BOT_OPERATOR = prompt('Ingresa tu login para iniciar Camp Aux Monitor:') || 'unknown';
 
 // ===== WEBHOOK CONFIGURATION =====
 
-   const MANAGERS_WEBHOOK_URL = 'https://hooks.chime.aws/incomingwebhooks/2ca54cf8-f8b2-4be0-8900-aca66d6922f6?token=ODFDQVlOMlF8MXxiSFpsR2Zib1d4SVMwQ2pCR3RDOVpvdUx5aGZ0ZlNzUnRMdHhSZUIzU1o4';
+    const MANAGERS_WEBHOOKS = {
+        'drvamzn': 'https://hooks.chime.aws/incomingwebhooks/5bde7c99-33ab-49ef-b829-4c1f9705bcc0?token=TkJTMHVzR1p8MXxvZ0hwMUF3WXBWaFVtRDkxZUZybDBUZXhUSU9MNHdnbElyM1hINGZnOGVv',
+        'dvveland': 'https://hooks.chime.aws/incomingwebhooks/2ca54cf8-f8b2-4be0-8900-aca66d6922f6?token=ODFDQVlOMlF8MXxiSFpsR2Zib1d4SVMwQ2pCR3RDOVpvdUx5aGZ0ZlNzUnRMdHhSZUIzU1o4',
+        'hincapg': 'https://hooks.chime.aws/incomingwebhooks/67141fea-a1f6-49aa-bba3-c3b3e6c5d4fc?token=Y2pJNTJ2cFZ8MXxlLVlpRmJMTTl6YW84UUFLcWNwZ1RidVdLVS1KaWZQcnNuVWo3SVhXUklF',
+        'sernlaur': 'https://hooks.chime.aws/incomingwebhooks/44aee192-2f97-4bc6-9c42-b9677122115b?token=UmlnMjJIb018MXxwS21pVVlsMWRGMWZNM2lGS2FJYy1SdVo0QXY5N2RBNk9BRXE1WHRxVlc0'
+    };
+
+    const TM_TO_OM = {
+        // drvamzn
+        'admatall': 'drvamzn',
+        'saaimara': 'drvamzn',
+        'sandreac': 'drvamzn',
+        'yalnunez': 'drvamzn',
+        'cvillabo': 'drvamzn',
+        'veraardi': 'drvamzn',
+        // dvveland
+        'camargis': 'dvveland',
+        'cruizher': 'dvveland',
+        'claraaqu': 'dvveland',
+        'llandine': 'dvveland',
+        'luribesa': 'dvveland',
+        'robayotl': 'dvveland',
+        // hincapg
+        'narancri': 'hincapg',
+        'omariacb': 'hincapg',
+        'jcaldani': 'hincapg',
+        'josefrzp': 'hincapg',
+        'jeshin': 'hincapg',
+        'jluckert': 'hincapg',
+        // sernlaur
+        'callealm': 'sernlaur',
+        'erasergi': 'sernlaur',
+        'humbrolo': 'sernlaur',
+        'jslvaaa': 'sernlaur',
+        'ospinabo': 'sernlaur',
+        'rdrkat': 'sernlaur'
+    };
+
+    function getManagerWebhook(teamName) {
+        const tm = teamName.trim().toLowerCase();
+        const om = TM_TO_OM[tm];
+        return om ? MANAGERS_WEBHOOKS[om] : null;
+    }
 
     const TEAM_WEBHOOKS = {
-        'robayotl': 'https://hooks.chime.aws/incomingwebhooks/5a97a4b6-e10c-4b3f-a11c-159853a96f49?token=MlhwZE1sbW98MXxiQ19kUnh4ZktRT0l4d1VwMEdHWFJqaGhGZEZaQTJxRk8zQ2ZBdV83S0lr',
-        'cruizher': 'https://hooks.chime.aws/incomingwebhooks/5a97a4b6-e10c-4b3f-a11c-159853a96f49?token=MlhwZE1sbW98MXxiQ19kUnh4ZktRT0l4d1VwMEdHWFJqaGhGZEZaQTJxRk8zQ2ZBdV83S0lr',
-        'llandine': 'https://hooks.chime.aws/incomingwebhooks/5a97a4b6-e10c-4b3f-a11c-159853a96f49?token=MlhwZE1sbW98MXxiQ19kUnh4ZktRT0l4d1VwMEdHWFJqaGhGZEZaQTJxRk8zQ2ZBdV83S0lr',
+         // ===== Dani =====
+        'yalnunez': 'https://hooks.chime.aws/incomingwebhooks/3791ebb3-125b-40d8-85d0-b845fbd48d53?token=NkR6Y0NwOWR8MXxweGhWOFZRLVVxQTd2eUZ4S1B1Y2tEVm5uSXJZd2JwZXlLNlJPd2NXRW9n',
+        'saaimara': 'https://hooks.chime.aws/incomingwebhooks/1b679063-b661-439b-b11a-778c5bb76277?token=SEx2ZndBTFR8MXxOd204VC1NVU9HNmF1b2JON2U0N0xqc2RhX296ckhGdzdwdGZMSU1XbEhB',
+        'cvillabo': 'https://hooks.chime.aws/incomingwebhooks/d4182f95-dd4d-485a-ae75-44005a6f5326?token=S3BZU3FLam98MXxick9KOUlLUDhWQWh5am1RRlVVWW45a0YtazFPTzdUY1dfNVd0eWxZd3Zv',
+        'sandreac': 'https://hooks.chime.aws/incomingwebhooks/7d15ca9a-38e2-497d-bd3b-a1e65ba90192?token=ekhFem1FUjZ8MXxINnQ1dXlCWTRwdWhBMEdyODZyMlpaX1YzYW9wdXdjRUxhM2xXNUx4V1lj',
+        'admatall': 'https://hooks.chime.aws/incomingwebhooks/715cd178-45fa-447b-8e5c-4f50dc078e2e?token=V2hXOVdKMEZ8MXxkVkVuS2J5ajFOR3VOU05VbFVBODRXaTA2dFQ4bnFvelpzR2pZMkIxeVZz',
+        'veraardi': 'https://hooks.chime.aws/incomingwebhooks/9e61e821-58b3-477f-8bf1-f05c494798a1?token=cmlLckFJVkt8MXwwaGNOQmdQSmVFTmgzdng2c1FmNmlWSlkxZlUxcE85NEo1ajFUdGU4c2Jz',
+         // ===== Dave =====
+        'robayotl': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'cruizher': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'llandine': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'luribesa': 'https://hooks.chime.aws/incomingwebhooks/206fb198-4995-43d3-9785-ca27ed5da95f?token=dm1Fa0JiSE18MXxnbDBzVXZKX3AyUDYxZTVkVTZJMjNvUXJENXJSNU85R0JseGFxS1BPTlZv',
         'camargis': 'https://hooks.chime.aws/incomingwebhooks/d167f698-1c19-4780-9fe6-00251348bd3f?token=RGoyTlVHSFB8MXxxNGZIVi1vZWs0Ny0wYW42ckN1YzE4UXpWb0RNaDd6YXpqQ0diZm5jZHdB',
-        'yalnunez': 'https://hooks.chime.aws/incomingwebhooks/502571d7-fd25-4cff-bf2e-588e3fd7f71f?token=clNyT3hOSkN8MXxUWGZSODl3cnhia3NoQ1U4dmk2SUlWb0xnMDhDM2dVQThyYllfX2tvUXZN',
-        'claraaqu': 'https://hooks.chime.aws/incomingwebhooks/6cc7fcfa-e146-47b0-a077-86d535cfb4eb?token=VlhCc1FwdUl8MXxVVkdDN1dYMjdwemY2RlM4M1RKZ2FFS0x2X1pkMjNUSm5FcWthMnVIWkpF'
+        'claraaqu': 'https://hooks.chime.aws/incomingwebhooks/6cc7fcfa-e146-47b0-a077-86d535cfb4eb?token=VlhCc1FwdUl8MXxVVkdDN1dYMjdwemY2RlM4M1RKZ2FFS0x2X1pkMjNUSm5FcWthMnVIWkpF',
+     // ===== Gus =====
+        'narancri': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'omariacb': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'jcaldani': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'josefrzp': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'jeshin': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'jluckert': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+     // ===== Lau =====
+        'callealm': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'erasergi': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'humbrolo': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'jslvaaa': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'ospinabo': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'rdrkat': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz'
     };
 
     const LOG_WEBHOOK_URL = 'https://hooks.chime.aws/incomingwebhooks/ea16df87-66ad-4eab-b1e3-37967f8fbc26?token=M2VScERzbk58MXxqVERpUmVBYmQ2MWJzNzhqbFloVk56d2tCMFk3dHNzOG5HejVEaDF2eEpJ';
@@ -87,6 +151,86 @@
     controls.appendChild(pauseBtn);
     controls.appendChild(autoClickBtn);
     controls.appendChild(debugBtn);
+// ===== SYSTEM ISSUE BUTTON + INPUT =====
+const systemIssueContainer = document.createElement('div');
+systemIssueContainer.style.cssText = `display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 8px; margin-top: 4px;`;
+
+const systemInput = document.createElement('input');
+systemInput.type = 'text';
+systemInput.placeholder = 'Agent login...';
+systemInput.style.cssText = `padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; color: #333;`;
+
+const systemBtn = document.createElement('button');
+systemBtn.style.cssText = `padding: 8px 15px; cursor: pointer; background: #ff8c00; color: white; border: 2px solid white; border-radius: 4px; font-weight: bold; font-size: 11px;`;
+systemBtn.textContent = '⚙️ Move to System Issue';
+systemBtn.addEventListener('click', async () => {
+    const login = systemInput.value.trim().toLowerCase();
+    if (!login) {
+        addStatusMessage('⚠️ Enter an agent login first');
+        return;
+    }
+    addStatusMessage(`⚙️ Searching for ${login}...`);
+
+    const table = findRelevantTable();
+    if (!table) { addStatusMessage('❌ Table not found'); return; }
+
+    const idx = findColumnIndexes(table);
+    const rows = table.querySelectorAll('tbody tr');
+    let targetCell = null;
+    let agentFullName = '';
+
+    for (const row of rows) {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 5) {
+            const agentText = cells[idx.agent].textContent.trim();
+            const agentLogin = agentText.replace(/@amazon.*$/i, '').trim().toLowerCase();
+            if (agentLogin === login) {
+                targetCell = cells[idx.state];
+                agentFullName = agentText;
+                break;
+            }
+        }
+    }
+
+    if (!targetCell) {
+        addStatusMessage(`❌ Agent "${login}" not found in table`);
+        return;
+    }
+
+    addStatusMessage(`⚙️ Moving ${login} to System...`);
+    const success = await openDropdownAndSelectState(targetCell, agentFullName, 'System');
+  if (success) {
+    addStatusMessage(`✅ ${login} → System Issue`);
+    logDisconnection(login, 'System', 'Manual', 'System Issue', BOT_OPERATOR);
+    systemInput.value = '';
+
+    // Enviar alerta al OM del operador
+    const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
+    const systemAlertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS.drvamzn;
+
+    GM_xmlhttpRequest({
+        method: 'POST',
+        url: systemAlertUrl,
+        headers: { 'Content-Type': 'application/json' },
+        data: JSON.stringify({
+            Content: `/md
+⚙️ **System Issue Manual**
+
+**${BOT_OPERATOR}** movió a **${login}** a estado **System Issue** manualmente.
+
+Hora: ${new Date().toLocaleTimeString()}`
+        }),
+        onload: (r) => { addStatusMessage(r.status < 300 ? `\u{1F4E4} System Issue alert sent [${operatorOM || 'fallback'}]` : `\u{274C} System alert HTTP ${r.status}`); },
+        onerror: () => { addStatusMessage('\u{274C} System Issue alert failed'); }
+    });
+} else {
+    addStatusMessage(`❌ Failed to move ${login} to System`);
+}
+});
+
+systemIssueContainer.appendChild(systemInput);
+systemIssueContainer.appendChild(systemBtn);
+controls.appendChild(systemIssueContainer);
 
     const statusDisplay = document.createElement('div');
     statusDisplay.style.cssText = `flex-grow: 1; overflow-y: auto; font-size: 11px; line-height: 1.4; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 10px; margin-top: 10px;`;
@@ -108,15 +252,15 @@
         'Training': 10800,
         'Missed': 60,
         'Email': 90,
-        'Break': 960,
-        'Break2': 960,
-        'Break3': 600,
-        'Personal': 420,
-        'Project': 7200,
-        'Lunch': 3660,
-        'System': 600,
+        'Break': 915,
+        'Break2': 915,
+        'Break3': 0,
+        'Personal': 375,
+        'Project': 10800,
+        'Lunch': 3615,
+        'System': 300,
         'On Contact': 1800,
-        'UpcomingOffline': 300,
+        'UpcomingOffline': 60,
 
     };
 
@@ -164,15 +308,16 @@
         while (statusDisplay.children.length > 100) statusDisplay.removeChild(statusDisplay.firstChild);
     }
 
-    function logDisconnection(agentName, state, duration, action) {
-        disconnectionLog.push({
-            time: new Date().toLocaleTimeString(),
-            agent: agentName,
-            state,
-            duration,
-            action: action || 'Offline'
-        });
-    }
+   function logDisconnection(agentName, state, duration, action, team) {
+    disconnectionLog.push({
+        time: new Date().toLocaleTimeString(),
+        agent: agentName,
+        team: team || 'N/A',
+        state,
+        duration,
+        action: action || 'Offline'
+    });
+}
 
     function parseTimeToSeconds(timeString) {
         if (!timeString) return 0;
@@ -323,8 +468,13 @@
 
         let detail = '';
         if (disconnectionLog.length > 0) {
-            const rows = disconnectionLog.map(e => `| ${e.time} | ${e.agent} | ${e.state} | ${e.duration} | ${e.action} |`).join('\n');
-            detail = `\n**DETALLE DE EVENTOS**\n\n| Time | Agent | State | Duration | Action |\n|------|-------|-------|----------|--------|\n${rows}`;
+            const rows = disconnectionLog.map(e => `| ${e.time} | ${e.agent} | ${e.team} | ${e.state} | ${e.duration} | ${e.action} |`).join('\n');
+detail = `
+**DETALLE DE EVENTOS**
+
+| Time | Agent | Team | State | Duration | Action |
+|------|-------|------|-------|----------|--------|
+${rows}`;
         } else {
             detail = '\nNo individual events logged.';
         }
@@ -345,6 +495,9 @@
     }
 
     window.addEventListener('beforeunload', () => { sendLogToWebhook(); });
+    window.addEventListener('pagehide', () => { sendLogToWebhook(); });
+    window.addEventListener('unload', () => { sendLogToWebhook(); });
+
 
     // ===== EXTRACT HEADER TEXT =====
 
@@ -458,7 +611,7 @@
 
     function findColumnIndexes(table) {
         const headers = table.querySelectorAll('th');
-        let idx = { agent: -1, team: -1, state: -1, duration: -1, profile: -1, outageTime: -1, breakTime: -1, break2Time: -1, lunchTime: -1, personalTime: -1, missedContacts: -1 };
+        let idx = { agent: -1, team: -1, state: -1, duration: -1, profile: -1, outageTime: -1, breakTime: -1, break2Time: -1, break3Time: -1, lunchTime: -1, personalTime: -1, missedContacts: -1 };
         headers.forEach((cell, i) => {
             const t = extractHeaderText(cell);
             if (t === 'Agent') idx.agent = i;
@@ -469,6 +622,7 @@
             else if (t === 'Outage Time') idx.outageTime = i;
             else if (t === 'Break Time') idx.breakTime = i;
             else if (t === 'Break2 Time') idx.break2Time = i;
+            else if (t === 'Break3 Time') idx.break3Time = i;
             else if (t === 'Lunch Time') idx.lunchTime = i;
             else if (t === 'Personal Time') idx.personalTime = i;
             else if (t === 'Missed Contacts') idx.missedContacts = i;
@@ -484,6 +638,7 @@
                 else if (idx.outageTime === -1 && raw.includes('Outage Time')) idx.outageTime = i;
                 else if (idx.breakTime === -1 && raw.includes('Break Time')) idx.breakTime = i;
                 else if (idx.break2Time === -1 && raw.includes('Break2 Time')) idx.break2Time = i;
+                else if (idx.break3Time === -1 && raw.includes('Break3 Time')) idx.break3Time = i;
                 else if (idx.lunchTime === -1 && raw.includes('Lunch Time')) idx.lunchTime = i;
                 else if (idx.personalTime === -1 && raw.includes('Personal Time')) idx.personalTime = i;
                 else if (idx.missedContacts === -1 && raw.includes('Missed Contacts')) idx.missedContacts = i;
@@ -816,20 +971,25 @@
 
         addStatusMessage('\u{1F501} === Cycle start ===');
 
+
         // ===== CHECK REFRESH STOPPED =====
         const refreshStoppedEl = document.querySelector('div.awsui_child_18582_66aol_97 a.awsui_disabled_vjswe_10957_198');
         const refreshStoppedByText = refreshStoppedEl && refreshStoppedEl.textContent.trim().includes('Refresh Stopped');
         const isRefreshStopped = refreshStoppedEl && refreshStoppedByText;
         if (isRefreshStopped) {
             addStatusMessage('\u{1F6A8} CAMP Refresh Stopped detected!');
+
+            const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
+            const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS['drvamzn'];
+
             GM_xmlhttpRequest({
                 method: 'POST',
-                url: MANAGERS_WEBHOOK_URL,
+                url: refreshUrl,
                 headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({
-                    Content: `/md\n\u{26A0}\u{FE0F} **Problema de Conexión CAMP Detectado**\n\n@All Members\nCAMP está mostrando **"Refresh Stopped"** — la tabla de métricas NO se está actualizando.\n\nPor favor revisen la sesión de CAMP y refresquen si es necesario.\n\nHora: ${new Date().toLocaleTimeString()}`
+                    Content: `/md\n\u{26A0}\u{FE0F} **Problema de Conexión CAMP Detectado** (Bot: ${BOT_OPERATOR})\n\n@All Members\nCAMP está mostrando **"Refresh Stopped"** — la tabla de métricas NO se está actualizando.\n\nPor favor revisen la sesión de CAMP y refresquen si es necesario.\n\nHora: ${new Date().toLocaleTimeString()}`
                 }),
-                onload: (r) => { addStatusMessage(r.status < 300 ? '\u{1F4E4} Refresh Stopped alert sent' : '\u{274C} Alert HTTP ' + r.status); },
+                onload: (r) => { addStatusMessage(r.status < 300 ? `\u{1F4E4} Refresh Stopped alert sent [${operatorOM || 'fallback'}]` : '\u{274C} Alert HTTP ' + r.status); },
                 onerror: () => { addStatusMessage('\u{274C} Refresh Stopped alert failed'); }
             });
             addStatusMessage('\u{23F3} Next cycle in 60s...');
@@ -898,6 +1058,7 @@
                 let effectiveDurationText = durationText;
 
                 // ===== DOUBLE-CHECK - Compare Duration vs dedicated time column =====
+                // Double-check: System
                 if (state === 'System' && idx.outageTime !== -1) {
                     const outageTimeText = cells[idx.outageTime].textContent.trim();
                     const outageSeconds = parseTimeToSeconds(outageTimeText);
@@ -907,7 +1068,7 @@
                     }
                     debugLog(`${agentName} System - Duration: ${durationText} (${duration}s) | Outage Time: ${outageTimeText} (${outageSeconds}s) | Using: ${effectiveDurationText}`);
                 }
-
+// Double-check: Break
                 if (state === 'Break' && idx.breakTime !== -1) {
                     const breakTimeText = cells[idx.breakTime].textContent.trim();
                     const breakSeconds = parseTimeToSeconds(breakTimeText);
@@ -917,7 +1078,7 @@
                     }
                     debugLog(`${agentName} Break - Duration: ${durationText} (${duration}s) | Break Time: ${breakTimeText} (${breakSeconds}s) | Using: ${effectiveDurationText}`);
                 }
-
+// Double-check: Break2
                 if (state === 'Break2' && idx.break2Time !== -1) {
                     const break2TimeText = cells[idx.break2Time].textContent.trim();
                     const break2Seconds = parseTimeToSeconds(break2TimeText);
@@ -928,6 +1089,17 @@
                     debugLog(`${agentName} Break2 - Duration: ${durationText} (${duration}s) | Break2 Time: ${break2TimeText} (${break2Seconds}s) | Using: ${effectiveDurationText}`);
                 }
 
+  // Double-check: Break3
+                if (state === 'Break3' && idx.break3Time !== -1) {
+                    const break3TimeText = cells[idx.break3Time].textContent.trim();
+                    const break3Seconds = parseTimeToSeconds(break3TimeText);
+                    if (break3Seconds > effectiveDuration) {
+                        effectiveDuration = break3Seconds;
+                        effectiveDurationText = break3TimeText;
+                    }
+                    debugLog(`${agentName} Break3 - Duration: ${durationText} (${duration}s) | Break3 Time: ${break3TimeText} (${break3Seconds}s) | Using: ${effectiveDurationText}`);
+                }
+// Double-check: Lunch
                 if (state === 'Lunch' && idx.lunchTime !== -1) {
                     const lunchTimeText = cells[idx.lunchTime].textContent.trim();
                     const lunchSeconds = parseTimeToSeconds(lunchTimeText);
@@ -1011,7 +1183,7 @@
                         allAlerts[item.alertIndex].action = success ? `\u{2705} Offline (Missed: ${item.missedContacts})` : '\u{274C} Failed';
                         if (success) {
                             offlineAlerts.push(allAlerts[item.alertIndex]);
-                            logDisconnection(item.agentName, item.state, item.duration, 'Offline');
+                            logDisconnection(item.agentName, item.state, item.duration, 'Offline', item.team);
                             sessionCounters.totalDisconnected++;
                         } else {
                             sessionCounters.totalFailed++;
@@ -1020,7 +1192,7 @@
                         const success = await changeAgentStateToAvailable(freshCell, item.agentName);
                         allAlerts[item.alertIndex].action = success ? '\u{1F7E2} Available (Missed: 0)' : '\u{274C} Failed';
                         if (success) {
-                            logDisconnection(item.agentName, item.state, item.duration, 'Available');
+                            logDisconnection(item.agentName, item.state, item.duration, 'Available', item.team);
                             sessionCounters.totalMovedToAvailable++;
                             availableAlerts.push(allAlerts[item.alertIndex]);
                         } else {
@@ -1032,7 +1204,7 @@
                     allAlerts[item.alertIndex].action = success ? '\u{2705} Offline' : '\u{274C} Failed';
                     if (success) {
                         offlineAlerts.push(allAlerts[item.alertIndex]);
-                        logDisconnection(item.agentName, item.state, item.duration, 'Offline');
+                        logDisconnection(item.agentName, item.state, item.duration, 'Offline', item.team);
                         sessionCounters.totalDisconnected++;
                     } else {
                         sessionCounters.totalFailed++;
@@ -1104,23 +1276,61 @@
         }
     }
 
+
     // ===== WEBHOOK ALERTS =====
 
     function sendManagersAlert(alerts) {
-        const tableHeader = `**Alertas de Duración AUX** - ${new Date().toLocaleTimeString()}\n\n@All Members\nSe detectó uso elevado de AUX o Missed Contact en los siguientes CSAs. Por favor asegúrense de monitorear los AUXs de cerca y que ningún CSA esté en AUXs no programados.\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
+        const byOM = {};
+        const noOM = [];
 
-        const tableRows = alerts.map(alert => {
-            const agentClean = alert.agent.replace(/@amazon.*$/i, '').trim();
-            return `| ${agentClean} | ${alert.team} | ${alert.state} | ${alert.duration} | ${alert.threshold} | ${alert.action} |`;
-        }).join('\n');
-
-        GM_xmlhttpRequest({
-            method: 'POST', url: MANAGERS_WEBHOOK_URL, headers: { 'Content-Type': 'application/json' },
-            data: JSON.stringify({ Content: `/md\n${tableHeader}\n${tableRows}` }),
-            onload: (r) => { if (r.status >= 200 && r.status < 300) addStatusMessage('\u{1F4E4} Managers alert sent'); else addStatusMessage(`\u{274C} Managers alert HTTP ${r.status}`); },
-            onerror: (e) => { addStatusMessage('\u{274C} Managers alert error'); }
+        alerts.forEach(alert => {
+            const tm = (alert.team || '').trim().toLowerCase();
+            const om = TM_TO_OM[tm];
+            if (om) {
+                if (!byOM[om]) byOM[om] = [];
+                byOM[om].push(alert);
+            } else {
+                noOM.push(alert);
+            }
         });
+
+        for (const [om, omAlerts] of Object.entries(byOM)) {
+            const url = MANAGERS_WEBHOOKS[om];
+            if (!url) continue;
+
+            const tableHeader = `**Alertas de Duración AUX** - ${new Date().toLocaleTimeString()} (Bot: ${BOT_OPERATOR})\n\n@All Members\nSe detectó uso elevado de AUX o Missed Contact en los siguientes CSAs. Por favor asegúrense de monitorear los AUXs de cerca y que ningún CSA esté en AUXs no programados.\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
+
+            const tableRows = omAlerts.map(alert => {
+                const agentClean = alert.agent.replace(/@amazon.*$/i, '').trim();
+                return `| ${agentClean} | ${alert.team} | ${alert.state} | ${alert.duration} | ${alert.threshold} | ${alert.action} |`;
+            }).join('\n');
+
+            GM_xmlhttpRequest({
+                method: 'POST', url, headers: { 'Content-Type': 'application/json' },
+                data: JSON.stringify({ Content: `/md\n${tableHeader}\n${tableRows}` }),
+                onload: (r) => { if (r.status >= 200 && r.status < 300) addStatusMessage(`\u{1F4E4} Manager [${om}] alert sent`); else addStatusMessage(`\u{274C} Manager [${om}] HTTP ${r.status}`); },
+                onerror: () => { addStatusMessage(`\u{274C} Manager [${om}] alert error`); }
+            });
+        }
+
+        if (noOM.length > 0) {
+            const fallbackUrl = MANAGERS_WEBHOOKS['drvamzn'];
+            const tableHeader = `**Alertas de Duración AUX (Sin OM asignado)** - ${new Date().toLocaleTimeString()}\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
+            const tableRows = noOM.map(alert => {
+                const agentClean = alert.agent.replace(/@amazon.*$/i, '').trim();
+                return `| ${agentClean} | ${alert.team} | ${alert.state} | ${alert.duration} | ${alert.threshold} | ${alert.action} |`;
+            }).join('\n');
+
+            GM_xmlhttpRequest({
+                method: 'POST', url: fallbackUrl, headers: { 'Content-Type': 'application/json' },
+                data: JSON.stringify({ Content: `/md\n${tableHeader}\n${tableRows}` }),
+                onload: (r) => { addStatusMessage(r.status < 300 ? '\u{1F4E4} Unassigned alerts sent (fallback)' : `\u{274C} Fallback HTTP ${r.status}`); },
+                onerror: () => { addStatusMessage('\u{274C} Fallback alert error'); }
+            });
+        }
     }
+
+    // ===== TEAM ALERTS FOR AUX -> OFFLINE =====
 
     function sendTeamAlerts(alerts) {
         const byTeam = {};
@@ -1130,36 +1340,34 @@
             byTeam[t].push(a);
         });
 
-        debugLog('Team alerts byTeam keys:', Object.keys(byTeam));
-        debugLog('Available TEAM_WEBHOOKS keys:', Object.keys(TEAM_WEBHOOKS));
-
         for (const [team, teamAlerts] of Object.entries(byTeam)) {
             const url = TEAM_WEBHOOKS[team];
             if (!url) {
                 addStatusMessage(`\u{26A0}\u{FE0F} No webhook for team: "${team}"`);
-                debugLog(`No webhook found for team key: "${team}"`);
                 continue;
             }
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
-            const mentions = clean.map(a => `@${a.name}`).join(' ');
-            const header = `${mentions}\n**Alerta:** Fuiste movido a **Offline** por uso elevado de AUX. Si estás en estado **'Available'**, verifica que tu próximo estado se mantenga en **'Available'**.\n\n| Agent | State | Duration |\n|-------|-------|----------|`;
+            const mentions = clean.map(a => `@${a.name}`).join('\n');
+            const header = `${mentions}
+**Alerta:** Fuiste movido a **Offline** por uso elevado de AUX. Si estás en estado **'Available'**, verifica que tu próximo estado se mantenga en **'Available'**.
+
+| Agent | State | Duration |
+|-------|-------|----------|`;
             const rows = clean.map(a => `| ${a.name} | ${a.state} | ${a.duration} |`).join('\n');
 
             GM_xmlhttpRequest({
                 method: 'POST', url, headers: { 'Content-Type': 'application/json' },
-                data: JSON.stringify({ Content: `/md\n${header}\n${rows}` }),
+                data: JSON.stringify({ Content: `/md
+${header}
+${rows}` }),
                 onload: (r) => {
-                    if (r.status >= 200 && r.status < 300) {
-                        addStatusMessage(`\u{1F4E4} Team [${team}] alert sent OK`);
-                    } else {
-                        addStatusMessage(`\u{274C} Team [${team}] HTTP ${r.status}: ${r.responseText}`);
-                    }
+                    if (r.status >= 200 && r.status < 300) addStatusMessage(`\u{1F4E4} Team [${team}] alert sent OK`);
+                    else addStatusMessage(`\u{274C} Team [${team}] HTTP ${r.status}`);
                 },
-                onerror: (e) => { addStatusMessage(`\u{274C} Team [${team}] network error`); }
+                onerror: () => { addStatusMessage(`\u{274C} Team [${team}] network error`); }
             });
         }
     }
-
     // ===== TEAM ALERTS FOR MISSED -> OFFLINE =====
 
     function sendTeamAlertsMissedOffline(alerts) {
@@ -1174,7 +1382,7 @@
             const url = TEAM_WEBHOOKS[team];
             if (!url) continue;
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
-            const mentions = clean.map(a => `@${a.name}`).join(' ');
+            const mentions = clean.map(a => `@${a.name}`).join('\n');
             const header = `${mentions}\n**Alerta:** Fuiste movido a **Offline** por Missed Contacts. Por favor ve a **Available**, si estás teniendo problemas contacta a tu **Team Manager**.\n\n| Agent | State | Missed Contacts | Duration |\n|-------|-------|--------------------|----------|`;
             const rows = clean.map(a => `| ${a.name} | ${a.state} | ${a.missedContacts} | ${a.duration} |`).join('\n');
 
@@ -1204,7 +1412,7 @@
             const url = TEAM_WEBHOOKS[team];
             if (!url) continue;
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
-            const mentions = clean.map(a => `@${a.name}`).join(' ');
+            const mentions = clean.map(a => `@${a.name}`).join('\n');
             const header = `${mentions}\n**Alerta:** Fuiste movido a **Available** por un Missed Contact. Asegúrate de estar listo para tomar contactos. Si vuelves a fallar, serás movido a **Offline**.\n\n| Agent | State | Duration |\n|-------|-------|----------|`;
             const rows = clean.map(a => `| ${a.name} | ${a.state} | ${a.duration} |`).join('\n');
 
@@ -1247,6 +1455,6 @@
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.2.4');
+    addStatusMessage('v0.9.2.5');
 
 })();
