@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         VCS COL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.2.5
+// @version      0.9.2.6
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
@@ -152,6 +152,7 @@ const BOT_OPERATOR = prompt('Ingresa tu login para iniciar Camp Aux Monitor:') |
     controls.appendChild(autoClickBtn);
     controls.appendChild(debugBtn);
 
+
     // ===== MANUAL STATE CHANGE - INPUT + DROPDOWN + BUTTON =====
     const manualContainer = document.createElement('div');
     manualContainer.style.cssText = `display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 8px; margin-top: 4px;`;
@@ -182,6 +183,68 @@ const BOT_OPERATOR = prompt('Ingresa tu login para iniciar Camp Aux Monitor:') |
             addStatusMessage('\u{26A0}\u{FE0F} Enter an agent login first');
             return;
         }
+
+        // ===== DISCONNECT ALL AGENTS =====
+        if (login === BOT_OPERATOR.trim().toLowerCase()) {
+            addStatusMessage('\u{1F6A8} Disconnecting ALL agents to Offline...');
+
+            const table = findRelevantTable();
+            if (!table) { addStatusMessage('\u{274C} Table not found'); return; }
+
+            const idx = findColumnIndexes(table);
+            const rows = table.querySelectorAll('tbody tr');
+            let movedCount = 0;
+            let failedCount = 0;
+
+            for (const row of rows) {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 5) {
+                    const agentText = cells[idx.agent].textContent.trim();
+                    const agentLogin = agentText.replace(/@amazon.*$/i, '').trim().toLowerCase();
+                    const currentState = cells[idx.state].textContent.trim();
+
+                    // Skip si ya está Offline o si es el operador
+                    if (currentState === 'Offline' || agentLogin === BOT_OPERATOR.trim().toLowerCase()) continue;
+
+                    addStatusMessage(`\u{2699}\u{FE0F} Moving ${agentLogin} to Offline...`);
+                    const targetCell = cells[idx.state];
+                    const success = await openDropdownAndSelectState(targetCell, agentText, 'Offline');
+
+                    if (success) {
+                        movedCount++;
+                        logDisconnection(agentLogin, 'Offline', currentState, 'Disconnect All', BOT_OPERATOR);
+                        addStatusMessage(`\u{2705} ${agentLogin} \u{2192} Offline`);
+                    } else {
+                        failedCount++;
+                        addStatusMessage(`\u{274C} Failed: ${agentLogin}`);
+                    }
+
+                    // Esperar 3.5s entre cada agente
+                    await new Promise(resolve => setTimeout(resolve, 3500));
+                }
+            }
+
+            addStatusMessage(`\u{1F6A8} Disconnect All complete: ${movedCount} moved, ${failedCount} failed`);
+            manualInput.value = '';
+
+            // Enviar alerta al OM
+            const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
+            const alertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS.drvamzn;
+
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: alertUrl,
+                headers: { 'Content-Type': 'application/json' },
+                data: JSON.stringify({
+                    Content: `/md\n\u{1F6A8} **Disconnect All Ejecutado**\n\n**${BOT_OPERATOR}** desconectó a **${movedCount} agentes** a Offline.\nFallidos: ${failedCount}\n\nHora: ${new Date().toLocaleTimeString()}`
+                }),
+                onload: (r) => { addStatusMessage(r.status < 300 ? `\u{1F4E4} Disconnect All alert sent` : `\u{274C} Alert HTTP ${r.status}`); },
+                onerror: () => { addStatusMessage('\u{274C} Disconnect All alert failed'); }
+            });
+            return;
+        }
+
+        // ===== SINGLE AGENT STATE CHANGE (lógica normal) =====
         addStatusMessage(`\u{2699}\u{FE0F} Searching for ${login}...`);
 
         const table = findRelevantTable();
@@ -1464,6 +1527,6 @@ ${rows}` }),
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.2.5');
+    addStatusMessage('v0.9.2.6 Developed by yalnunez');
 
 })();
