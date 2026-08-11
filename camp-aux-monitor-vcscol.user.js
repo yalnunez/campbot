@@ -15,7 +15,7 @@
 
 (function () {
     'use strict';
-const BOT_OPERATOR = prompt('Ingresa tu login para iniciar Camp Aux Monitor:') || 'unknown';
+const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'unknown';
 
 // ===== WEBHOOK CONFIGURATION =====
 
