@@ -72,9 +72,9 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
         'admatall': 'https://hooks.chime.aws/incomingwebhooks/715cd178-45fa-447b-8e5c-4f50dc078e2e?token=V2hXOVdKMEZ8MXxkVkVuS2J5ajFOR3VOU05VbFVBODRXaTA2dFQ4bnFvelpzR2pZMkIxeVZz',
         'veraardi': 'https://hooks.chime.aws/incomingwebhooks/9e61e821-58b3-477f-8bf1-f05c494798a1?token=cmlLckFJVkt8MXwwaGNOQmdQSmVFTmgzdng2c1FmNmlWSlkxZlUxcE85NEo1ajFUdGU4c2Jz',
          // ===== Dave =====
-        'robayotl': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'cruizher': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'llandine': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'robayotl': 'https://hooks.chime.aws/incomingwebhooks/854ac974-16f9-4933-bff8-27eea4787851?token=Y0pGdnRkS2p8MXxPQXdGTEdoazVuSVg1VlVvVFB1RG9SbFRadXMwZE1WeGlUX0VBVmc4RVQ0',
+        'cruizher': 'https://hooks.chime.aws/incomingwebhooks/c1d2932a-81e9-4cd6-a081-27b42c789556?token=aFpVUm9RUm58MXxXalBfTVZ6Sk9WaXF5TXk2ZGhlTjlzck1ENGFPQ0pWS2d5ZjgwWFhXOHlv',
+        'llandine': 'https://hooks.chime.aws/incomingwebhooks/adc38fcf-a13f-4523-a5c1-f5610e78bd02?token=NlBqRDN1ODJ8MXxiN3F0Q2ZoMlVrV3lnaG81d1QxQldpZkVObXMxN1RmbVFMR0UtRGUwdkh3',
         'luribesa': 'https://hooks.chime.aws/incomingwebhooks/206fb198-4995-43d3-9785-ca27ed5da95f?token=dm1Fa0JiSE18MXxnbDBzVXZKX3AyUDYxZTVkVTZJMjNvUXJENXJSNU85R0JseGFxS1BPTlZv',
         'camargis': 'https://hooks.chime.aws/incomingwebhooks/d167f698-1c19-4780-9fe6-00251348bd3f?token=RGoyTlVHSFB8MXxxNGZIVi1vZWs0Ny0wYW42ckN1YzE4UXpWb0RNaDd6YXpqQ0diZm5jZHdB',
         'claraaqu': 'https://hooks.chime.aws/incomingwebhooks/6cc7fcfa-e146-47b0-a077-86d535cfb4eb?token=VlhCc1FwdUl8MXxVVkdDN1dYMjdwemY2RlM4M1RKZ2FFS0x2X1pkMjNUSm5FcWthMnVIWkpF',
