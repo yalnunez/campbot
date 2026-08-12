@@ -81,7 +81,7 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
      // ===== Gus =====
         'narancri': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'omariacb': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'jcaldani': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'jcaldani': 'https://hooks.chime.aws/incomingwebhooks/b764256b-33e2-466f-b795-db1e4c026c5a?token=VVE1U2prM018MXxZLVVwRUQ1TW1HZFNXSnQ3Y3FtR0JsOUZGUllKUzdoUEwzZGhvZHZxX2pJ',
         'josefrzp': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'jeshin': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'jluckert': 'https://hooks.chime.aws/incomingwebhooks/388a5cbd-0bd5-42ec-b3e9-9fe5091cb144?token=MGFHZDlhdW18MXxMQU05TTFqOW00ei1RU25KNm4yRHhDVERvWDlHY1BTTHBUX1plQkhTbjVF',
