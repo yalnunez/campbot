@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         VCS COL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.2.6
+// @version      0.9.2.7
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
@@ -1527,6 +1527,6 @@ ${rows}` }),
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.2.6 Developed by yalnunez');
+    addStatusMessage('v0.9.2.7 Developed by yalnunez');
 
 })();
