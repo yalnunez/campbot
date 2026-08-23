@@ -7,15 +7,21 @@
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
 // @author       @yalnunez
-// @match        https://prod-iad.camp.wwcs.amazon.dev/Metrics
-// @match        https://prod-fra.camp.wwcs.amazon.dev/Metrics
+// @match        https://prod-iad.camp.wwcs.amazon.dev/*
+// @match        https://prod-fra.camp.wwcs.amazon.dev/*
 // @grant        GM_xmlhttpRequest
 // @connect      hooks.chime.aws
 // ==/UserScript==
 
 (function () {
     'use strict';
-const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'unknown';
+let BOT_OPERATOR = '';
+while (!BOT_OPERATOR) {
+    BOT_OPERATOR = (prompt('Enter your login to start the bot:') || '').trim().toLowerCase();
+    if (!BOT_OPERATOR) {
+        alert('You must enter your login to use the bot.');
+    }
+}
 
 // ===== WEBHOOK CONFIGURATION =====
 
@@ -24,6 +30,8 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
         'dvveland': 'https://hooks.chime.aws/incomingwebhooks/2ca54cf8-f8b2-4be0-8900-aca66d6922f6?token=ODFDQVlOMlF8MXxiSFpsR2Zib1d4SVMwQ2pCR3RDOVpvdUx5aGZ0ZlNzUnRMdHhSZUIzU1o4',
         'sernlaur': 'https://hooks.chime.aws/incomingwebhooks/44aee192-2f97-4bc6-9c42-b9677122115b?token=UmlnMjJIb018MXxwS21pVVlsMWRGMWZNM2lGS2FJYy1SdVo0QXY5N2RBNk9BRXE1WHRxVlc0'
     };
+
+    const MOVEMENTS_WEBHOOK = 'https://hooks.chime.aws/incomingwebhooks/b1838128-6cc5-4135-bedf-0d7692042e58?token=c0ROVXcyZXh8MXxPV01EZGRfYnVfbHJUVWxXZkhTQlZZRFVEY0V4S2RKOUpKZExhWjdnUnJz';
 
     const TM_TO_OM = {
         // drvamzn
@@ -39,7 +47,7 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
         'builessa': 'drvamzn',
         'mahechla': 'drvamzn',
         'jluckert': 'drvamzn',
-        
+
         // dvveland
         'camargis': 'dvveland',
         'cruizher': 'dvveland',
@@ -50,7 +58,7 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
         'florezhi': 'dvveland',
         'gonzylau': 'dvveland',
         'jcaldani': 'dvveland',
-      
+
         // sernlaur
         'callealm': 'sernlaur',
         'erasergi': 'sernlaur',
@@ -80,7 +88,7 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
         'svilaura': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'builessa': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'mahechla': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-       
+
          // ===== Dave =====
         'robayotl': 'https://hooks.chime.aws/incomingwebhooks/854ac974-16f9-4933-bff8-27eea4787851?token=Y0pGdnRkS2p8MXxPQXdGTEdoazVuSVg1VlVvVFB1RG9SbFRadXMwZE1WeGlUX0VBVmc4RVQ0',
         'cruizher': 'https://hooks.chime.aws/incomingwebhooks/c1d2932a-81e9-4cd6-a081-27b42c789556?token=aFpVUm9RUm58MXxXalBfTVZ6Sk9WaXF5TXk2ZGhlTjlzck1ENGFPQ0pWS2d5ZjgwWFhXOHlv',
@@ -91,7 +99,7 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
         'jcaldani': 'https://hooks.chime.aws/incomingwebhooks/b764256b-33e2-466f-b795-db1e4c026c5a?token=VVE1U2prM018MXxZLVVwRUQ1TW1HZFNXSnQ3Y3FtR0JsOUZGUllKUzdoUEwzZGhvZHZxX2pJ',
         'florezhi': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'gonzylau': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        
+
      // ===== Lau =====
         'callealm': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'erasergi': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
@@ -160,6 +168,7 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
     controls.appendChild(debugBtn);
 
 
+
     // ===== MANUAL STATE CHANGE - INPUT + DROPDOWN + BUTTON =====
     const manualContainer = document.createElement('div');
     manualContainer.style.cssText = `display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 8px; margin-top: 4px;`;
@@ -220,6 +229,7 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
                     if (success) {
                         movedCount++;
                         logDisconnection(agentLogin, 'Offline', currentState, 'Disconnect All', BOT_OPERATOR);
+                        sendMovementLog(agentLogin, currentState, 'Offline', 'Disconnect All', BOT_OPERATOR);
                         addStatusMessage(`\u{2705} ${agentLogin} \u{2192} Offline`);
                     } else {
                         failedCount++;
@@ -285,6 +295,7 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
         if (success) {
             addStatusMessage(`\u{2705} ${login} \u{2192} ${targetState}`);
             logDisconnection(login, targetState, 'Manual', targetState, BOT_OPERATOR);
+            sendMovementLog(login, 'Manual', targetState, 'Manual Change', BOT_OPERATOR);
             manualInput.value = '';
 
             // Enviar alerta al OM del operador
@@ -323,43 +334,87 @@ const BOT_OPERATOR = prompt('Enter your Login to start Camp Aux Monitor:') || 'u
     const navbar = document.querySelector('#navbar');
     if (navbar) navbar.style.marginLeft = '280px';
 
-    // ===== AUX THRESHOLDS =====
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║              AUX THRESHOLDS CONFIGURATION                    ║
+    // ║  Defines max allowed duration (in seconds) per AUX state.   ║
+    // ║  If an agent exceeds the threshold, the bot takes action.   ║
+    // ╚══════════════════════════════════════════════════════════════╝
 
     const AUX_THRESHOLDS = {
-      	'Available': 10800,
-        'Meeting': 10800,
-        'Training': 10800,
-        'Missed': 60,
-        'Email': 90,
-        'Break': 915,
-        'Break2': 915,
-        'Break3': 0,
-        'Personal': 375,
-        'Project': 10800,
-        'Lunch': 3615,
-        'System': 300,
-        'On Contact': 1800,
-        'UpcomingOffline': 60,
-
+        'Available': 10800,//3:00:00 — Alert only (no disconnect)
+        'Meeting': 10800,// 3:00:00 — Alert only (no disconnect)
+        'Training': 10800,// 3:00:00 — Alert only (no disconnect)
+        'Project': 10800,// 3:00:00 — Alert only (no disconnect)
+        'Missed': 60,// 0:01:00 — Disconnect to Offline (2+) or Available (<2)
+        'Email': 90,// 0:01:30 — Disconnect to Offline
+        'Break': 915,// 0:15:15 — Disconnect to Offline
+        'Break2': 915,// 0:15:15 — Disconnect to Offline
+        'Break3': 0,// 0:00:00 — Immediate disconnect (any duration)
+        'Personal': 375,// 0:06:15 — Disconnect to Offline
+        'Lunch': 3615,// 1:00:15 — Disconnect to Offline
+        'System': 300,// 0:05:00 — Disconnect to Offline
+        'On Contact': 1800,// 0:30:00 — Alert only (no disconnect)
+        'UpcomingOffline': 60// 0:01:00 — Disconnect to Offline
     };
 
-    //===== PWD AGENTS (Extended Break: 20:15 = 1215s) =====
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║              PWD AGENTS — Extended Break                     ║
+    // ║  Agents with disability accommodation get 20:15 (1215s)     ║
+    // ║  for Break and Break2 instead of the standard 15:15 (915s). ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
     const PWD_AGENTS = [
         'roalvarz',
-        'duqqcarl',
-        // Agregar más logins aquí
+        'duqqcarl'
+        // Add more PWD logins here
     ];
-    const PWD_BREAK_THRESHOLD = 1215;
+    const PWD_BREAK_THRESHOLD = 1215; // 20:15
+
     function getBreakThreshold(agentName) {
         const login = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
         return PWD_AGENTS.includes(login) ? PWD_BREAK_THRESHOLD : AUX_THRESHOLDS.Break;
     }
 
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║           NEW HIRE AGENTS — Extended On Contact              ║
+    // ║  New hires get 60:00 (3600s) for On Contact alerts instead  ║
+    // ║  of the standard 30:00 (1800s). Alert only, no disconnect.  ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
+    const NEW_HIRE_AGENTS = [
+        'pinjuanc1',
+        'glyherna1',
+        'camilfgo1',
+        'einnieto1',
+        'kvalenca1',
+        'jimeangi1',
+        'jubmarul1',
+        'nsdayana1',
+        'hdarlint1',
+        'alvarocx1',
+        'mercaycr1'
+        // Add more New Hire logins here
+    ];
+    const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║           AUTO-OFFLINE STATES                                ║
+    // ║  States where the bot will automatically disconnect agents   ║
+    // ║  to Offline when threshold is exceeded (via AutoClick).      ║
+    // ║  States NOT listed here are alert-only (no state change).   ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
     const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║           SESSION VARIABLES                                  ║
+    // ╚══════════════════════════════════════════════════════════════╝
 
     let isMonitoring = false;
     let monitoringTimeout = null;
     let disconnectionLog = [];
+
 
     // ===== Previous cycle tracking for On Contact alternating =====
     let previousOnContactAlerted = new Set();
@@ -1199,8 +1254,17 @@ ${rows}`;
                     debugLog(`${agentName} Personal - Duration: ${durationText} (${duration}s) | Personal Time: ${personalTimeText} (${personalSeconds}s) | Using: ${effectiveDurationText}`);
                 }
 
-                // ===== CHECK THRESHOLD VIOLATION (PWD logic for Break/Break2) =====
-                const effectiveThreshold = (state === 'Break' || state === 'Break2') ? getBreakThreshold(agentName) : AUX_THRESHOLDS[state];
+                // ===== CHECK THRESHOLD VIOLATION (PWD for Break/Break2, New Hires for On Contact) =====
+                let effectiveThreshold;
+                if (state === 'Break' || state === 'Break2') {
+                    effectiveThreshold = getBreakThreshold(agentName);
+                } else if (state === 'On Contact') {
+                    const loginCheck = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
+                    effectiveThreshold = NEW_HIRE_AGENTS.includes(loginCheck) ? NEW_HIRE_ON_CONTACT_THRESHOLD : AUX_THRESHOLDS['On Contact'];
+                } else {
+                    effectiveThreshold = AUX_THRESHOLDS[state];
+                }
+
                 if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) {
                     const shouldAutoOffline = AUTO_OFFLINE_STATES.includes(state);
 
@@ -1263,6 +1327,7 @@ ${rows}`;
                         if (success) {
                             offlineAlerts.push(allAlerts[item.alertIndex]);
                             logDisconnection(item.agentName, item.state, item.duration, 'Offline', item.team);
+                            sendMovementLog(item.agentName, 'Missed', 'Offline', 'Missed 2+', item.team);
                             sessionCounters.totalDisconnected++;
                         } else {
                             sessionCounters.totalFailed++;
@@ -1272,6 +1337,7 @@ ${rows}`;
                         allAlerts[item.alertIndex].action = success ? '\u{1F7E2} Available (Missed: 0)' : '\u{274C} Failed';
                         if (success) {
                             logDisconnection(item.agentName, item.state, item.duration, 'Available', item.team);
+                            sendMovementLog(item.agentName, 'Missed', 'Available', 'Missed <2', item.team);
                             sessionCounters.totalMovedToAvailable++;
                             availableAlerts.push(allAlerts[item.alertIndex]);
                         } else {
@@ -1284,6 +1350,7 @@ ${rows}`;
                     if (success) {
                         offlineAlerts.push(allAlerts[item.alertIndex]);
                         logDisconnection(item.agentName, item.state, item.duration, 'Offline', item.team);
+                        sendMovementLog(item.agentName, item.state, 'Offline', 'AUX Threshold', item.team);
                         sessionCounters.totalDisconnected++;
                     } else {
                         sessionCounters.totalFailed++;
@@ -1505,6 +1572,21 @@ ${rows}` }),
                 onerror: () => { addStatusMessage(`\u{274C} Team [${team}] Available network error`); }
             });
         }
+    }
+
+    // ===== MOVEMENTS WEBHOOK (Manual + Automatic) =====
+    function sendMovementLog(agentLogin, fromState, toState, action, team) {
+        const time = new Date().toLocaleTimeString();
+        const table = `| Agent | Team | From | To | Action | Time |\n|-------|------|------|----|--------|------|\n| ${agentLogin} | ${team || 'N/A'} | ${fromState} | ${toState} | ${action} | ${time} |`;
+
+        GM_xmlhttpRequest({
+            method: 'POST',
+            url: MOVEMENTS_WEBHOOK,
+            headers: { 'Content-Type': 'application/json' },
+            data: JSON.stringify({ Content: `/md\n${table}` }),
+            onload: (r) => { if (r.status >= 300) addStatusMessage(`\u{274C} Movement log HTTP ${r.status}`); },
+            onerror: () => { addStatusMessage('\u{274C} Movement log failed'); }
+        });
     }
 
     // ===== EVENT LISTENERS =====
