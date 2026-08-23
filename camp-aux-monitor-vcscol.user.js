@@ -1574,20 +1574,24 @@ ${rows}` }),
         }
     }
 
-    // ===== MOVEMENTS WEBHOOK (Manual + Automatic) =====
-    function sendMovementLog(agentLogin, fromState, toState, action, team) {
+       // ===== MOVEMENTS WEBHOOK (Manual + Automatic) =====
+    function sendMovementLog(agentLogin, fromState, toState, action, team, duration) {
         const time = new Date().toLocaleTimeString();
-        const table = `| Agent | Team | From | To | Action | Time |\n|-------|------|------|----|--------|------|\n| ${agentLogin} | ${team || 'N/A'} | ${fromState} | ${toState} | ${action} | ${time} |`;
+        const table = `| Agent | Team | From | To | Duration | Action | Time |
+|-------|------|------|----|----------|--------|------|
+| ${agentLogin} | ${team || 'N/A'} | ${fromState} | ${toState} | ${duration || 'N/A'} | ${action} | ${time} |`;
 
         GM_xmlhttpRequest({
             method: 'POST',
             url: MOVEMENTS_WEBHOOK,
             headers: { 'Content-Type': 'application/json' },
-            data: JSON.stringify({ Content: `/md\n${table}` }),
+            data: JSON.stringify({ Content: `/md
+${table}` }),
             onload: (r) => { if (r.status >= 300) addStatusMessage(`\u{274C} Movement log HTTP ${r.status}`); },
             onerror: () => { addStatusMessage('\u{274C} Movement log failed'); }
         });
     }
+
 
     // ===== EVENT LISTENERS =====
 
