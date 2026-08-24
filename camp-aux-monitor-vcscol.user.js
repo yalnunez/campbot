@@ -246,7 +246,7 @@ while (!BOT_OPERATOR) {
 
             // Enviar alerta al OM
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
-            const alertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS.drvamzn;
+            const alertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MOVEMENTS_WEBHOOK;
 
             GM_xmlhttpRequest({
                 method: 'POST',
@@ -300,7 +300,7 @@ while (!BOT_OPERATOR) {
 
             // Enviar alerta al OM del operador
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
-            const alertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS.drvamzn;
+            const alertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MOVEMENTS_WEBHOOK;
 
             GM_xmlhttpRequest({
                 method: 'POST',
@@ -1114,7 +1114,7 @@ ${rows}`;
             addStatusMessage('\u{1F6A8} CAMP Refresh Stopped detected!');
 
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
-            const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS['drvamzn'];
+            const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MOVEMENTS_WEBHOOK;
 
             GM_xmlhttpRequest({
                 method: 'POST',
@@ -1327,7 +1327,8 @@ ${rows}`;
                         if (success) {
                             offlineAlerts.push(allAlerts[item.alertIndex]);
                             logDisconnection(item.agentName, item.state, item.duration, 'Offline', item.team);
-                            sendMovementLog(item.agentName, 'Missed', 'Offline', 'Missed 2+', item.team);
+                            sendMovementLog(item.agentName, 'Missed', 'Offline', 'Missed 2+', item.team, item.duration);
+
                             sessionCounters.totalDisconnected++;
                         } else {
                             sessionCounters.totalFailed++;
@@ -1337,7 +1338,8 @@ ${rows}`;
                         allAlerts[item.alertIndex].action = success ? '\u{1F7E2} Available (Missed: 0)' : '\u{274C} Failed';
                         if (success) {
                             logDisconnection(item.agentName, item.state, item.duration, 'Available', item.team);
-                            sendMovementLog(item.agentName, 'Missed', 'Available', 'Missed <2', item.team);
+                            sendMovementLog(item.agentName, 'Missed', 'Available', 'Missed <2', item.team, item.duration);
+
                             sessionCounters.totalMovedToAvailable++;
                             availableAlerts.push(allAlerts[item.alertIndex]);
                         } else {
@@ -1350,7 +1352,8 @@ ${rows}`;
                     if (success) {
                         offlineAlerts.push(allAlerts[item.alertIndex]);
                         logDisconnection(item.agentName, item.state, item.duration, 'Offline', item.team);
-                        sendMovementLog(item.agentName, item.state, 'Offline', 'AUX Threshold', item.team);
+                        sendMovementLog(item.agentName, item.state, 'Offline', 'AUX Threshold', item.team, item.duration);
+
                         sessionCounters.totalDisconnected++;
                     } else {
                         sessionCounters.totalFailed++;
@@ -1460,7 +1463,7 @@ ${rows}`;
         }
 
         if (noOM.length > 0) {
-            const fallbackUrl = MANAGERS_WEBHOOKS['drvamzn'];
+            const fallbackUrl = MOVEMENTS_WEBHOOK;
             const tableHeader = `**Alertas de Duración AUX (Sin OM asignado)** - ${new Date().toLocaleTimeString()}\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
             const tableRows = noOM.map(alert => {
                 const agentClean = alert.agent.replace(/@amazon.*$/i, '').trim();
