@@ -383,17 +383,7 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const NEW_HIRE_AGENTS = [
-        'pinjuanc1',
-        'glyherna1',
-        'camilfgo1',
-        'einnieto1',
-        'kvalenca1',
-        'jimeangi1',
-        'jubmarul1',
-        'nsdayana1',
-        'hdarlint1',
-        'alvarocx1',
-        'mercaycr1'
+        'jimaceve', 'siergagu', 'menathod', 'alvanama', 'ankvarga', 'anasooba', 'luengana', 'gomezvat', 'andrcaiq', 'andycarc', 'kangelsh', 'aveangie', 'ranuadum', 'calambis', 'carvcant', 'useccarl', 'duxcarlo', 'almenaca', 'lopeztec', 'chyromer', 'cramires', 'londcrie', 'gilodani', 'gonzdanh', 'danninoc', 'dmonroyq', 'nsalazda', 'dakgutie', 'zdcabeza', 'diegohos', 'fdiegofe', 'modreise', 'nsaaveed', 'cmedwiny', 'caeliang', 'elpatern', 'pueemanu', 'freyandh', 'diazgabp', 'muriuhar', 'perhollm', 'ccardjac', 'diazjaid', 'calvocab', 'arbjeyso', 'abrilocj', 'sazjh', 'beltrazj', 'jndavidm', 'gjorgeel', 'jorgabel', 'jjosepb', 'monteaju', 'jujoyama', 'lramjua', 'amtjuanp', 'nbarjuan', 'jtamayoe', 'juansezo', 'yjtorren', 'penagjul', 'rojawjul', 'rojastju', 'vilaurac', 'laquirog', 'aldlaurn', 'osoluisq', 'luisfoca', 'palnmari', 'michvaru', 'moreomig', 'stephdub', 'fonsnico', 'osccardw', 'opapaula', 'irafaeld', 'samespit', 'sdbarrer', 'sanvcabr', 'kcrsanti', 'snecheve', 'sajuradx', 'srmunozg', 'ssantiar', 'restresb', 'hsebacun', 'catolics', 'orejuese', 'lsimonal', 'vpereaal', 'yeisones', 'jennytat', 'hjacekan', 'orentelu', 'luimoliy', 'fmendozk', 'ibjuanjo', 'mercsaid', 'lenijoha', 'rodbguer', 'cusgueme', 'avilvjos', 'hejeffeu', 'ashlieph', 'bajudyva', 'marirojk', 'zgomezsi', 'tjcanomo', 'orojuanm', 'carlojpa', 'hmillanz', 'gustospi', 'gomezchc', 'ncajuanc', 'hsidavid', 'jaimpaul', 'zalonsna', 'btobonpi', 'wvaleriv', 'quicenan', 'vlenimar', 'pereeiva', 'ocontres', 'cgarzonm', 'valbuend', 'dacardol', 'zjhuryzv', 'escjuanf', 'mejuanse', 'jhonfmun', 'lacruzbe', 'celymant', 'dillamen'
         // Add more New Hire logins here
     ];
     const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
