@@ -84,9 +84,9 @@ while (!BOT_OPERATOR) {
         'veraardi': 'https://hooks.chime.aws/incomingwebhooks/9e61e821-58b3-477f-8bf1-f05c494798a1?token=cmlLckFJVkt8MXwwaGNOQmdQSmVFTmgzdng2c1FmNmlWSlkxZlUxcE85NEo1ajFUdGU4c2Jz',
         'jluckert': 'https://hooks.chime.aws/incomingwebhooks/388a5cbd-0bd5-42ec-b3e9-9fe5091cb144?token=MGFHZDlhdW18MXxMQU05TTFqOW00ei1RU25KNm4yRHhDVERvWDlHY1BTTHBUX1plQkhTbjVF',
         'omariacb': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'josedrzp': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'svilaura': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'builessa': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'josedrzp': 'https://hooks.chime.aws/incomingwebhooks/c3b952c0-87b0-455f-b46c-057f9e454038?token=QmREWXBONDd8MXwwbEhsYm04ZVpJcUlMT2J1ZFYzZUR3QWlvb3pIcW1WRVRBcjZ2T09RajZB',
+        'svilaura': 'https://hooks.chime.aws/incomingwebhooks/544da09e-8cd7-4a17-932a-7ddd05ef44f6?token=elNJSG1hWGh8MXwtNzI3RE52My1RcTJhSEtCa1o5T2hicHQ3c3VNc19WY3JVTEN4Q1ZxOHlv',
+        'builessa': 'https://hooks.chime.aws/incomingwebhooks/91c15c3e-0489-4602-b541-a2d35915e1ed?token=S25sOXMwVlN8MXxBYVo3SHQ4RjZaRlFKYWVFa0E0TFJnTXBCYjdhZnlUbmZkVElybHJsUlpB',
         'mahechla': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
 
          // ===== Dave =====
