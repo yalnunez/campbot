@@ -383,7 +383,7 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const NEW_HIRE_AGENTS = [
-        'jimaceve', 'siergagu', 'menathod', 'alvanama', 'ankvarga', 'anasooba', 'luengana', 'gomezvat', 'andrcaiq', 'andycarc', 'kangelsh', 'aveangie', 'yrodale',
+        'jimaceve', 'siergagu', 'menathod', 'alvanama', 'ankvarga', 'anasooba', 'luengana', 'gomezvat', 'andrcaiq', 'andycarc', 'kangelsh', 'aveangie',
         'ranuadum', 'calambis', 'carvcant', 'useccarl', 'duxcarlo', 'almenaca', 'lopeztec', 'chyromer', 'cramires', 'londcrie', 'gilodani', 'gonzdanh', 
         'danninoc', 'dmonroyq', 'nsalazda', 'dakgutie', 'zdcabeza', 'diegohos', 'fdiegofe', 'modreise', 'nsaaveed', 'cmedwiny', 'caeliang', 'elpatern', 
         'pueemanu', 'freyandh', 'diazgabp', 'muriuhar', 'perhollm', 'ccardjac', 'diazjaid', 'calvocab', 'arbjeyso', 'abrilocj', 'sazjh', 'beltrazj', 'jndavidm', 
