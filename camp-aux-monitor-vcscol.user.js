@@ -90,7 +90,7 @@ while (!BOT_OPERATOR) {
         'mahechla': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
 
          // ===== Dave =====
-        'robayotl': 'https://hooks.chime.aws/incomingwebhooks/854ac974-16f9-4933-bff8-27eea4787851?token=Y0pGdnRkS2p8MXxPQXdGTEdoazVuSVg1VlVvVFB1RG9SbFRadXMwZE1WeGlUX0VBVmc4RVQ0',
+        'gonzylau': 'https://hooks.chime.aws/incomingwebhooks/854ac974-16f9-4933-bff8-27eea4787851?token=Y0pGdnRkS2p8MXxPQXdGTEdoazVuSVg1VlVvVFB1RG9SbFRadXMwZE1WeGlUX0VBVmc4RVQ0',
         'cruizher': 'https://hooks.chime.aws/incomingwebhooks/c1d2932a-81e9-4cd6-a081-27b42c789556?token=aFpVUm9RUm58MXxXalBfTVZ6Sk9WaXF5TXk2ZGhlTjlzck1ENGFPQ0pWS2d5ZjgwWFhXOHlv',
         'llandine': 'https://hooks.chime.aws/incomingwebhooks/adc38fcf-a13f-4523-a5c1-f5610e78bd02?token=NlBqRDN1ODJ8MXxiN3F0Q2ZoMlVrV3lnaG81d1QxQldpZkVObXMxN1RmbVFMR0UtRGUwdkh3',
         'luribesa': 'https://hooks.chime.aws/incomingwebhooks/5366bd61-770d-4ace-a496-1870010d1317?token=b21MeWpMcjZ8MXx5cmxfbm5lbVFlRUJCdWdGV2FBbDhJVVRpZW1mSTFRTGZjb2huZjhNTXZn',
@@ -98,7 +98,7 @@ while (!BOT_OPERATOR) {
         'claraaqu': 'https://hooks.chime.aws/incomingwebhooks/6cc7fcfa-e146-47b0-a077-86d535cfb4eb?token=VlhCc1FwdUl8MXxVVkdDN1dYMjdwemY2RlM4M1RKZ2FFS0x2X1pkMjNUSm5FcWthMnVIWkpF',
         'jcaldani': 'https://hooks.chime.aws/incomingwebhooks/b764256b-33e2-466f-b795-db1e4c026c5a?token=VVE1U2prM018MXxZLVVwRUQ1TW1HZFNXSnQ3Y3FtR0JsOUZGUllKUzdoUEwzZGhvZHZxX2pJ',
         'florezhi': 'https://hooks.chime.aws/incomingwebhooks/3e53e6f5-b579-4b74-bcdf-244b82251d5c?token=Znpra3dtazV8MXxpSzZhZjg3ZjE1aURyTldUUFNFX2ZuVEUzYVZ0aXRmTU1idWRnZm81cWhF',
-        'gonzylau': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'robayotl': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
 
      // ===== Lau =====
         'callealm': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
