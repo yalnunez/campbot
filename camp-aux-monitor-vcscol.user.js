@@ -414,23 +414,29 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const NEW_HIRE_AGENTS = [
-  // ===== Luribesa =====
+  // ===== Luribesa 08/27/2026 =====
   'anasooba', 'andrcaiq', 'ankvarga', 'arbjeyso', 'calvocab', 'chyromer', 'danninoc',
   'fdiegofe', 'gilodani', 'jndavidm', 'lopeztec', 'lsimonal', 'michvaru', 'muriuhar',
   'nsalazda', 'orejuese', 'palnmari', 'rojawjul', 'sajuradx', 'samespit',
+        
+   // ===== jcaldani =====
+  'ajenifva', 'brijaml', 'camilaqk', 'carkguzm', 'contrcam', 'cuarvico', 'delarojt',
+  'dianapma', 'germaneo', 'giovabox', 'giradanj', 'lecamilo', 'lisethde', 'llanglor',
+  'lvicmoli', 'nacubide', 'ojohavil', 'qellalma', 'quecanol', 'vmiggar', 'wvillamb',
+  'yandrilo', 'zrodmanu',
 
-  // ===== rdrkat =====
+  // ===== rdrkat 08/27/2026 =====
   'aveangie', 'beltrazj', 'ccardjac', 'diazgabp', 'diazjaid', 'freyandh', 'irafaeld',
   'jtamayoe', 'jujoyama', 'laquirog', 'londcrie', 'lramjua', 'luengana', 'luisfoca',
   'modreise', 'nbarjuan', 'penagjul', 'sanvcabr', 'srmunozg', 'ssantiar', 'useccarl',
   'vilaurac', 'vpereaal', 'yeisones', 'yjtorren', 'zdcabeza',
 
-  // ===== Robayotl =====
+  // ===== Robayotl 08/27/2026=====
   'aldlaurn', 'almenaca', 'amtjuanp', 'andycarc', 'carvcant', 'catolics', 'cmedwiny',
   'dakgutie', 'diegohos', 'dmonroyq', 'duxcarlo', 'kcrsanti', 'menathod', 'monteaju',
   'nsaaveed', 'opapaula', 'osccardw', 'osoluisq', 'perhollm', 'rojastju', 'sazjh',
 
-  // ===== svilaura =====
+  // ===== svilaura 08/27/2026 =====
   'abrilocj', 'alvanama', 'caeliang', 'calambis', 'elpatern', 'gjorgeel', 'gomezvat',
   'gonzdanh', 'hsebacun', 'jimaceve', 'jjosepb', 'jorgabel', 'juansezo', 'kangelsh',
   'moreomig', 'pueemanu', 'ranuadum', 'restresb', 'siergagu', 'snecheve', 'stephdub'
