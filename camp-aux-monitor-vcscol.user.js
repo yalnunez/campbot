@@ -383,16 +383,26 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const NEW_HIRE_AGENTS = [
-        'jimaceve', 'siergagu', 'menathod', 'alvanama', 'ankvarga', 'anasooba', 'luengana', 'gomezvat', 'andrcaiq', 'andycarc', 'kangelsh', 'aveangie',
-        'ranuadum', 'calambis', 'carvcant', 'useccarl', 'duxcarlo', 'almenaca', 'lopeztec', 'chyromer', 'cramires', 'londcrie', 'gilodani', 'gonzdanh', 
-        'danninoc', 'dmonroyq', 'nsalazda', 'dakgutie', 'zdcabeza', 'diegohos', 'fdiegofe', 'modreise', 'nsaaveed', 'cmedwiny', 'caeliang', 'elpatern', 
-        'pueemanu', 'freyandh', 'diazgabp', 'muriuhar', 'perhollm', 'ccardjac', 'diazjaid', 'calvocab', 'arbjeyso', 'abrilocj', 'sazjh', 'beltrazj', 'jndavidm', 
-        'gjorgeel', 'jorgabel', 'jjosepb', 'monteaju', 'jujoyama', 'lramjua', 'amtjuanp', 'nbarjuan', 'jtamayoe', 'juansezo', 'yjtorren', 'penagjul', 'rojawjul', 'rojastju', 
-        'vilaurac', 'laquirog', 'aldlaurn', 'osoluisq', 'luisfoca', 'palnmari', 'michvaru', 'moreomig', 'stephdub', 'fonsnico', 'osccardw', 'opapaula', 'irafaeld', 'samespit', 
-        'sdbarrer', 'sanvcabr', 'kcrsanti', 'snecheve', 'sajuradx', 'srmunozg', 'ssantiar', 'restresb', 'hsebacun', 'catolics', 'orejuese', 'lsimonal', 'vpereaal', 'yeisones', 
-        'jennytat', 'hjacekan', 'orentelu', 'luimoliy', 'fmendozk', 'ibjuanjo', 'mercsaid', 'lenijoha', 'rodbguer', 'cusgueme', 'avilvjos', 'hejeffeu', 'ashlieph', 'bajudyva', 
-        'marirojk', 'zgomezsi', 'tjcanomo', 'orojuanm', 'carlojpa', 'hmillanz', 'gustospi', 'gomezchc', 'ncajuanc', 'hsidavid', 'jaimpaul', 'zalonsna', 'btobonpi', 'wvaleriv', 
-        'quicenan', 'vlenimar', 'pereeiva', 'ocontres', 'cgarzonm', 'valbuend', 'dacardol', 'zjhuryzv', 'escjuanf', 'mejuanse', 'jhonfmun', 'lacruzbe', 'celymant', 'dillamen'
+  // ===== Luribesa 08/27/2026 =====
+  'anasooba', 'andrcaiq', 'ankvarga', 'arbjeyso', 'calvocab', 'chyromer', 'danninoc',
+  'fdiegofe', 'gilodani', 'jndavidm', 'lopeztec', 'lsimonal', 'michvaru', 'muriuhar',
+  'nsalazda', 'orejuese', 'palnmari', 'rojawjul', 'sajuradx', 'samespit',
+
+  // ===== rdrkat 08/27/2026 =====
+  'aveangie', 'beltrazj', 'ccardjac', 'diazgabp', 'diazjaid', 'freyandh', 'irafaeld',
+  'jtamayoe', 'jujoyama', 'laquirog', 'londcrie', 'lramjua', 'luengana', 'luisfoca',
+  'modreise', 'nbarjuan', 'penagjul', 'sanvcabr', 'srmunozg', 'ssantiar', 'useccarl',
+  'vilaurac', 'vpereaal', 'yeisones', 'yjtorren', 'zdcabeza',
+
+  // ===== Robayotl 08/27/2026 =====
+  'aldlaurn', 'almenaca', 'amtjuanp', 'andycarc', 'carvcant', 'catolics', 'cmedwiny',
+  'dakgutie', 'diegohos', 'dmonroyq', 'duxcarlo', 'kcrsanti', 'menathod', 'monteaju',
+  'nsaaveed', 'opapaula', 'osccardw', 'osoluisq', 'perhollm', 'rojastju', 'sazjh',
+
+  // ===== svilaura 08/27/2026 =====
+  'abrilocj', 'alvanama', 'caeliang', 'calambis', 'elpatern', 'gjorgeel', 'gomezvat',
+  'gonzdanh', 'hsebacun', 'jimaceve', 'jjosepb', 'jorgabel', 'juansezo', 'kangelsh',
+  'moreomig', 'pueemanu', 'ranuadum', 'restresb', 'siergagu', 'snecheve', 'stephdub'
         // Add more New Hire logins here
     ];
     const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
