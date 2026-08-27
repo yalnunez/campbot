@@ -357,6 +357,37 @@ while (!BOT_OPERATOR) {
         'On Contact': 1800,// 0:30:00 — Alert only (no disconnect)
         'UpcomingOffline': 60// 0:01:00 — Disconnect to Offline
     };
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║           OPERATION HOURS — Auto-Disconnect Outside Hours    ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
+    const OPERATION_HOURS = {
+        startHour: 3,// 03:00
+        startMinute: 0,
+        endHour: 23,// 23:00
+        endMinute: 0,
+        graceMinutes: 5// 5 min gracia → activo de 02:55 a 23:05
+    };
+
+   function isOutsideOperationHours() {
+        const now = new Date();
+        // Convertir a hora Colombia (UTC-5)
+        const colombiaOffset = -5 * 60;
+        const localOffset = now.getTimezoneOffset();
+        const colombiaTime = new Date(now.getTime() + (localOffset + colombiaOffset) * 60000);
+
+        const hours = colombiaTime.getHours();
+        const minutes = colombiaTime.getMinutes();
+        const currentTotalMinutes = hours * 60 + minutes;
+
+        // Límite inferior: 02:55 (startHour - graceMinutes)
+        const lowerLimit = (OPERATION_HOURS.startHour * 60 + OPERATION_HOURS.startMinute) - OPERATION_HOURS.graceMinutes;
+        // Límite superior: 23:05 (endHour + graceMinutes)
+        const upperLimit = (OPERATION_HOURS.endHour * 60 + OPERATION_HOURS.endMinute) + OPERATION_HOURS.graceMinutes;
+
+        // Fuera de operación si es ANTES de 02:55 O DESPUÉS de 23:05
+        return (currentTotalMinutes < lowerLimit || currentTotalMinutes > upperLimit);
+    }
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║              PWD AGENTS — Extended Break                     ║
@@ -383,23 +414,23 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const NEW_HIRE_AGENTS = [
-  // ===== Luribesa 08/27/2026 =====
+  // ===== Luribesa =====
   'anasooba', 'andrcaiq', 'ankvarga', 'arbjeyso', 'calvocab', 'chyromer', 'danninoc',
   'fdiegofe', 'gilodani', 'jndavidm', 'lopeztec', 'lsimonal', 'michvaru', 'muriuhar',
   'nsalazda', 'orejuese', 'palnmari', 'rojawjul', 'sajuradx', 'samespit',
 
-  // ===== rdrkat 08/27/2026 =====
+  // ===== rdrkat =====
   'aveangie', 'beltrazj', 'ccardjac', 'diazgabp', 'diazjaid', 'freyandh', 'irafaeld',
   'jtamayoe', 'jujoyama', 'laquirog', 'londcrie', 'lramjua', 'luengana', 'luisfoca',
   'modreise', 'nbarjuan', 'penagjul', 'sanvcabr', 'srmunozg', 'ssantiar', 'useccarl',
   'vilaurac', 'vpereaal', 'yeisones', 'yjtorren', 'zdcabeza',
 
-  // ===== Robayotl 08/27/2026 =====
+  // ===== Robayotl =====
   'aldlaurn', 'almenaca', 'amtjuanp', 'andycarc', 'carvcant', 'catolics', 'cmedwiny',
   'dakgutie', 'diegohos', 'dmonroyq', 'duxcarlo', 'kcrsanti', 'menathod', 'monteaju',
   'nsaaveed', 'opapaula', 'osccardw', 'osoluisq', 'perhollm', 'rojastju', 'sazjh',
 
-  // ===== svilaura 08/27/2026 =====
+  // ===== svilaura =====
   'abrilocj', 'alvanama', 'caeliang', 'calambis', 'elpatern', 'gjorgeel', 'gomezvat',
   'gonzdanh', 'hsebacun', 'jimaceve', 'jjosepb', 'jorgabel', 'juansezo', 'kangelsh',
   'moreomig', 'pueemanu', 'ranuadum', 'restresb', 'siergagu', 'snecheve', 'stephdub'
@@ -1100,6 +1131,7 @@ ${rows}`;
         return false;
     }
 
+
     // ===== MAIN MONITORING CYCLE =====
 
     async function monitoringCycle() {
@@ -1107,35 +1139,84 @@ ${rows}`;
 
         const sessionOk = await checkAndResumeSession();
         if (!sessionOk) {
-            addStatusMessage('\u{26A0}\u{FE0F} Session could not be resumed, retrying in 30s...');
+            addStatusMessage('\u26A0\uFE0F Session could not be resumed, retrying in 30s...');
             monitoringTimeout = setTimeout(monitoringCycle, 30000);
             return;
         }
 
-        addStatusMessage('\u{1F501} === Cycle start ===');
+        addStatusMessage('\uD83D\uDD01 === Cycle start ===');
 
+        // ===== AUTO-DISCONNECT OUTSIDE OPERATION HOURS =====
+        if (isOutsideOperationHours()) {
+            addStatusMessage('⛔ FUERA DE HORARIO OPERATIVO - Desconectando todos los agentes...');
+
+            const table = findRelevantTable();
+            if (table) {
+                const idx = findColumnIndexes(table);
+                const rows = table.querySelectorAll('tbody tr');
+                let movedCount = 0;
+                let failedCount = 0;
+
+                for (const row of rows) {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 5) {
+                        const agentText = cells[idx.agent].textContent.trim();
+                        const agentLogin = agentText.replace(/@amazon.*$/i, '').trim().toLowerCase();
+                        const currentState = cells[idx.state].textContent.trim();
+
+                        // Skip si ya está Offline
+                        if (currentState === 'Offline') continue;
+
+                        addStatusMessage(`⏳ Moving ${agentLogin} to Offline (fuera de horario)...`);
+                        const stateCell = cells[idx.state];
+                        const success = await openDropdownAndSelectState(stateCell, agentText, 'Offline');
+
+                        if (success) {
+                            movedCount++;
+                            logDisconnection(agentLogin, 'Offline', currentState, 'Outside Hours', agentLogin);
+                            sendMovementLog(agentLogin, currentState, 'Offline', 'Outside Operation Hours', agentLogin);
+                            addStatusMessage(`✅ ${agentLogin} → Offline`);
+                        } else {
+                            failedCount++;
+                            addStatusMessage(`❌ Failed: ${agentLogin}`);
+                        }
+
+                        // Esperar 3.5s entre cada agente
+                        await delay(3500);
+                    }
+                }
+
+                addStatusMessage(`⛔ Fuera de horario: ${movedCount} desconectados, ${failedCount} fallidos`);
+            } else {
+                addStatusMessage('⚠️ Table not found (outside hours check)');
+            }
+
+            addStatusMessage('⏳ Next cycle in 60s...');
+            monitoringTimeout = setTimeout(monitoringCycle, 60000);
+            return;
+        }
 
         // ===== CHECK REFRESH STOPPED =====
         const refreshStoppedEl = document.querySelector('div.awsui_child_18582_66aol_97 a.awsui_disabled_vjswe_10957_198');
         const refreshStoppedByText = refreshStoppedEl && refreshStoppedEl.textContent.trim().includes('Refresh Stopped');
         const isRefreshStopped = refreshStoppedEl && refreshStoppedByText;
         if (isRefreshStopped) {
-            addStatusMessage('\u{1F6A8} CAMP Refresh Stopped detected!');
+            addStatusMessage('\uD83D\uDEA8 CAMP Refresh Stopped detected!');
 
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
-            const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MOVEMENTS_WEBHOOK;
+            const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS['drvamzn'];
 
             GM_xmlhttpRequest({
                 method: 'POST',
                 url: refreshUrl,
                 headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({
-                    Content: `/md\n\u{26A0}\u{FE0F} **Problema de Conexión CAMP Detectado** (Bot: ${BOT_OPERATOR})\n\n@All Members\nCAMP está mostrando **"Refresh Stopped"** — la tabla de métricas NO se está actualizando.\n\nPor favor revisen la sesión de CAMP y refresquen si es necesario.\n\nHora: ${new Date().toLocaleTimeString()}`
+                    Content: `/md\n\u26A0\uFE0F **Problema de Conexión CAMP Detectado** (Bot: ${BOT_OPERATOR})\n\n@All Members\nCAMP está mostrando **"Refresh Stopped"** — la tabla de métricas NO se está actualizando.\n\nPor favor revisen la sesión de CAMP y refresquen si es necesario.\n\nHora: ${new Date().toLocaleTimeString()}`
                 }),
-                onload: (r) => { addStatusMessage(r.status < 300 ? `\u{1F4E4} Refresh Stopped alert sent [${operatorOM || 'fallback'}]` : '\u{274C} Alert HTTP ' + r.status); },
-                onerror: () => { addStatusMessage('\u{274C} Refresh Stopped alert failed'); }
+                onload: (r) => { addStatusMessage(r.status < 300 ? `\uD83D\uDCE4 Refresh Stopped alert sent [${operatorOM || 'fallback'}]` : '\u274C Alert HTTP ' + r.status); },
+                onerror: () => { addStatusMessage('\u274C Refresh Stopped alert failed'); }
             });
-            addStatusMessage('\u{23F3} Next cycle in 60s...');
+            addStatusMessage('\u23F3 Next cycle in 60s...');
             monitoringTimeout = setTimeout(monitoringCycle, 60000);
             return;
         }
@@ -1154,7 +1235,7 @@ ${rows}`;
         try {
             await processTableData();
         } catch (error) {
-            addStatusMessage(`\u{274C} Error: ${error.message}`);
+            addStatusMessage(`\u274C Error: ${error.message}`);
         }
 
         await delay(3000);
@@ -1162,7 +1243,7 @@ ${rows}`;
         clickCampPlayButton();
 
         if (!isMonitoring) return;
-        addStatusMessage('\u{23F3} Next cycle in 60s...');
+        addStatusMessage('\u23F3 Next cycle in 60s...');
         monitoringTimeout = setTimeout(monitoringCycle, 60000);
     }
 
@@ -1632,6 +1713,6 @@ ${table}` }),
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.2.8 Developed by yalnunez');
+    addStatusMessage('v0.9.2.9 Developed by yalnunez');
 
 })();
