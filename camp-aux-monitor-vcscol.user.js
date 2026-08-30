@@ -362,7 +362,7 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const OPERATION_HOURS = {
-        startHour: 2,// 02:00
+        startHour: 1,// 01:00
         startMinute: 0,
         endHour: 23,// 23:00
         endMinute: 0,
