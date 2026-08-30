@@ -419,6 +419,13 @@ while (!BOT_OPERATOR) {
   'fdiegofe', 'gilodani', 'jndavidm', 'lopeztec', 'lsimonal', 'michvaru', 'muriuhar',
   'nsalazda', 'orejuese', 'palnmari', 'rojawjul', 'sajuradx', 'samespit',
         
+// ===== sandreac 08/27/2026 =====
+  'ashlieph', 'avilvjos', 'bajudyva', 'btobonpi', 'cantorvw', 'cgarzonm', 'corujuli',
+  'dillamen', 'gomezchc', 'hejeffeu', 'hsidavid', 'jaimpaul', 'jennytat', 'luimoliy',
+  'marirojk', 'mejuanse', 'mercsaid', 'ocontres', 'orojuanm', 'rodbguer', 'tortandr',
+  'wvaleriv', 'zjhuryzv',
+
+       
    // ===== jcaldani =====
   'ajenifva', 'brijaml', 'camilaqk', 'carkguzm', 'contrcam', 'cuarvico', 'delarojt',
   'dianapma', 'germaneo', 'giovabox', 'giradanj', 'lecamilo', 'lisethde', 'llanglor',
