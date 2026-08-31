@@ -79,7 +79,7 @@ while (!BOT_OPERATOR) {
         'yalnunez': 'https://hooks.chime.aws/incomingwebhooks/3791ebb3-125b-40d8-85d0-b845fbd48d53?token=NkR6Y0NwOWR8MXxweGhWOFZRLVVxQTd2eUZ4S1B1Y2tEVm5uSXJZd2JwZXlLNlJPd2NXRW9n',
         'saaimara': 'https://hooks.chime.aws/incomingwebhooks/1b679063-b661-439b-b11a-778c5bb76277?token=SEx2ZndBTFR8MXxOd204VC1NVU9HNmF1b2JON2U0N0xqc2RhX296ckhGdzdwdGZMSU1XbEhB',
         'cvillabo': 'https://hooks.chime.aws/incomingwebhooks/d4182f95-dd4d-485a-ae75-44005a6f5326?token=S3BZU3FLam98MXxick9KOUlLUDhWQWh5am1RRlVVWW45a0YtazFPTzdUY1dfNVd0eWxZd3Zv',
-        'sandreac': 'https://hooks.chime.aws/incomingwebhooks/7d15ca9a-38e2-497d-bd3b-a1e65ba90192?token=ekhFem1FUjZ8MXxINnQ1dXlCWTRwdWhBMEdyODZyMlpaX1YzYW9wdXdjRUxhM2xXNUx4V1lj',
+        'sandreac': 'https://hooks.chime.aws/incomingwebhooks/a6fe665f-2736-4058-abf5-fc59cddfb425?token=czJpREdCNUR8MXxJd0J0NXp5UE1QSmV3Z1RWQURkN2NuRjh4YndJZDJNNmxfTllEdTVfSGw4',
         'admatall': 'https://hooks.chime.aws/incomingwebhooks/715cd178-45fa-447b-8e5c-4f50dc078e2e?token=V2hXOVdKMEZ8MXxkVkVuS2J5ajFOR3VOU05VbFVBODRXaTA2dFQ4bnFvelpzR2pZMkIxeVZz',
         'veraardi': 'https://hooks.chime.aws/incomingwebhooks/9e61e821-58b3-477f-8bf1-f05c494798a1?token=cmlLckFJVkt8MXwwaGNOQmdQSmVFTmgzdng2c1FmNmlWSlkxZlUxcE85NEo1ajFUdGU4c2Jz',
         'jluckert': 'https://hooks.chime.aws/incomingwebhooks/388a5cbd-0bd5-42ec-b3e9-9fe5091cb144?token=MGFHZDlhdW18MXxMQU05TTFqOW00ei1RU25KNm4yRHhDVERvWDlHY1BTTHBUX1plQkhTbjVF',
