@@ -87,7 +87,7 @@ while (!BOT_OPERATOR) {
         'josefrzp': 'https://hooks.chime.aws/incomingwebhooks/c3b952c0-87b0-455f-b46c-057f9e454038?token=QmREWXBONDd8MXwwbEhsYm04ZVpJcUlMT2J1ZFYzZUR3QWlvb3pIcW1WRVRBcjZ2T09RajZB',
         'svilaura': 'https://hooks.chime.aws/incomingwebhooks/544da09e-8cd7-4a17-932a-7ddd05ef44f6?token=elNJSG1hWGh8MXwtNzI3RE52My1RcTJhSEtCa1o5T2hicHQ3c3VNc19WY3JVTEN4Q1ZxOHlv',
         'builessa': 'https://hooks.chime.aws/incomingwebhooks/40ee2183-ba10-4333-b728-2ee3cdc3c440?token=VXZZbzdCa3Z8MXxEc005bXNRWWh4anc2N3ZIZEc0b3hlR193MnZpZGpLZjJJcmFiR095RGFF',
-        'mahechla': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
+        'mahechla': 'https://hooks.chime.aws/incomingwebhooks/715cd178-45fa-447b-8e5c-4f50dc078e2e?token=V2hXOVdKMEZ8MXxkVkVuS2J5ajFOR3VOU05VbFVBODRXaTA2dFQ4bnFvelpzR2pZMkIxeVZz',
 
          // ===== Dave =====
         'gonzylau': 'https://hooks.chime.aws/incomingwebhooks/854ac974-16f9-4933-bff8-27eea4787851?token=Y0pGdnRkS2p8MXxPQXdGTEdoazVuSVg1VlVvVFB1RG9SbFRadXMwZE1WeGlUX0VBVmc4RVQ0',
