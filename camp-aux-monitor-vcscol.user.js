@@ -353,7 +353,7 @@ while (!BOT_OPERATOR) {
         'Break3': 0,// 0:00:00 — Immediate disconnect (any duration)
         'Personal': 375,// 0:06:15 — Disconnect to Offline
         'Lunch': 3615,// 1:00:15 — Disconnect to Offline
-        'System': 300,// 0:05:00 — Disconnect to Offline
+        'System': 600,// 0:10:00 — Disconnect to Offline
         'On Contact': 1800,// 0:30:00 — Alert only (no disconnect)
         'UpcomingOffline': 60// 0:01:00 — Disconnect to Offline
     };
