@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         SDS VCSCOL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.1
+// @version      0.9.3.2
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
@@ -57,6 +57,7 @@ while (!BOT_OPERATOR) {
         'robayotl': 'dvveland',
         'florezhi': 'dvveland',
         'gonzylau': 'dvveland',
+        'augucasx': 'dvveland',
         'jcaldani': 'dvveland',
 
         // sernlaur
@@ -98,6 +99,7 @@ while (!BOT_OPERATOR) {
         'claraaqu': 'https://hooks.chime.aws/incomingwebhooks/6cc7fcfa-e146-47b0-a077-86d535cfb4eb?token=VlhCc1FwdUl8MXxVVkdDN1dYMjdwemY2RlM4M1RKZ2FFS0x2X1pkMjNUSm5FcWthMnVIWkpF',
         'jcaldani': 'https://hooks.chime.aws/incomingwebhooks/b764256b-33e2-466f-b795-db1e4c026c5a?token=VVE1U2prM018MXxZLVVwRUQ1TW1HZFNXSnQ3Y3FtR0JsOUZGUllKUzdoUEwzZGhvZHZxX2pJ',
         'florezhi': 'https://hooks.chime.aws/incomingwebhooks/3e53e6f5-b579-4b74-bcdf-244b82251d5c?token=Znpra3dtazV8MXxpSzZhZjg3ZjE1aURyTldUUFNFX2ZuVEUzYVZ0aXRmTU1idWRnZm81cWhF',
+        'aguscasx': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'robayotl': 'https://hooks.chime.aws/incomingwebhooks/7ec236de-cafb-4010-bbd2-20aec7409d79?token=T2hzNnF1Szh8MXxJQzJiM01Pd1FGRkw3MHdWOVFBWHlKRjJUNUNHTkFwMG9lakloV0ZDR3hn',
 
      // ===== Lau =====
@@ -366,7 +368,7 @@ while (!BOT_OPERATOR) {
         startMinute: 0,
         endHour: 23,// 23:00
         endMinute: 0,
-        graceMinutes: 5// 5 min gracia → activo de 01:55 a 23:05
+        graceMinutes: 5// 5 min gracia → activo de 00:55 a 23:05
     };
 
    function isOutsideOperationHours() {
@@ -414,10 +416,57 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const NEW_HIRE_AGENTS = [
-  // ===== Luribesa 08/27/2026 =====
+ // ===== camargis =====
+  'abellalo', 'agameden', 'alelpedr', 'alfange', 'anayaany', 'angietan', 'aspurp',
+  'deeduars', 'edgmerca', 'gojorgea', 'gonzakew', 'henryesm', 'jslgdo', 'jvcuella',
+  'keirajpa', 'mabelblp', 'mautgsyl', 'menadiel', 'mesahado', 'rolauras', 'svilaura',
+  'thomamex', 'villjeis',
+
+  // ===== claraaqu =====
+  'acastrjo', 'acejuans', 'andnydia', 'andrngut', 'angielkr', 'anthxm', 'beniteet',
+  'bkevalva', 'brabaron', 'caeddier', 'egueiser', 'fernjulu', 'joolaya', 'karoljul',
+  'kgojose', 'mariairr', 'montaini', 'mruiztri', 'rmorejul', 'sodavidg', 'tiquerey',
+  'uherwils', 'vjuanser',
+
+  // ===== cruizher =====
+  'abmariap', 'angjanez', 'bkcarlos', 'catacard', 'diegobas', 'edaniehe', 'gawsanti',
+  'jeseival', 'jospinao', 'kevibotp', 'lauralri', 'mateklon', 'molatati', 'moncadjx',
+  'mosmelan', 'nivballe', 'qkevinfe', 'romqdian', 'rubiocuy', 'sosagarc', 'ugdaniel',
+  'yerispme', 'zcamiloe',
+
+  // ===== florezhi =====
+  'acosnidi', 'agromari', 'albcamil', 'anyposad', 'bcardema', 'cadrioso', 'dagude',
+  'dilanmau', 'geacasti', 'givannab', 'jenifimo', 'jesuselc', 'kdiamoli', 'kmmanjar',
+  'leiddiaz', 'lesmecar', 'lstelamu', 'mendiveg', 'nitlopez', 'sbonleid', 'sixeduar',
+  'srgim', 'zuladria',
+
+  // ===== gonzylau =====
+  'amarmarc', 'angjohat', 'animbacq', 'becerjup', 'blanang', 'brigiaco', 'crzcastr',
+  'dannavro', 'davelaid', 'dianmqui', 'duqqcarl', 'ericapmo', 'espaalai', 'figuasly',
+  'judycond', 'luzuquir', 'mdayanam', 'migduart', 'ngfonsec', 'pinzonye', 'quimdavi',
+  'tccast', 'vmirey',
+
+  // ===== jcaldani =====
+  'ajenifva', 'brijaml', 'camilaqk', 'carkguzm', 'contrcam', 'cuarvico', 'delarojt',
+  'dianapma', 'germaneo', 'giradanj', 'lecamilo', 'lisethde', 'llanglor', 'lvicmoli',
+  'nacubide', 'ojohavil', 'qellalma', 'quecanol', 'vmiggar', 'wvillamb', 'yandrilo',
+  'zrodmanu',
+
+  // ===== llandine =====
+  'barrsari', 'camilfal', 'concseba', 'dayquint', 'deicyabe', 'faedwina', 'gonzylau',
+  'hcamimar', 'hemarodr', 'jairodca', 'jhopinzo', 'julioanr', 'jumejiar', 'lucasgaz',
+  'marlonsn', 'martruiv', 'nmadiana', 'ovasqjes', 'paezlauo', 'perazest', 'pereduva',
+  'reinagaj', 'silbsamu',
+
+  // ===== luribesa =====
   'anasooba', 'andrcaiq', 'ankvarga', 'arbjeyso', 'calvocab', 'chyromer', 'danninoc',
   'fdiegofe', 'gilodani', 'jndavidm', 'lopeztec', 'lsimonal', 'michvaru', 'muriuhar',
   'nsalazda', 'orejuese', 'palnmari', 'rojawjul', 'sajuradx', 'samespit',
+
+  // ===== robayotl =====
+  'aldlaurn', 'almenaca', 'amtjuanp', 'andycarc', 'carvcant', 'catolics', 'cmedwiny',
+  'dakgutie', 'diegohos', 'dmonroyq', 'duxcarlo', 'kcrsanti', 'menathod', 'monteaju',
+  'nsaaveed', 'opapaula', 'osccardw', 'osoluisq', 'perhollm', 'rojastju', 'sazjh',
         
 // ===== sandreac 08/27/2026 =====
   'ashlieph', 'avilvjos', 'bajudyva', 'btobonpi', 'cantorvw', 'cgarzonm', 'corujuli',
@@ -425,23 +474,12 @@ while (!BOT_OPERATOR) {
   'marirojk', 'mejuanse', 'mercsaid', 'ocontres', 'orojuanm', 'rodbguer', 'tortandr',
   'wvaleriv', 'zjhuryzv',
 
-       
-   // ===== jcaldani =====
-  'ajenifva', 'brijaml', 'camilaqk', 'carkguzm', 'contrcam', 'cuarvico', 'delarojt',
-  'dianapma', 'germaneo', 'giovabox', 'giradanj', 'lecamilo', 'lisethde', 'llanglor',
-  'lvicmoli', 'nacubide', 'ojohavil', 'qellalma', 'quecanol', 'vmiggar', 'wvillamb',
-  'yandrilo', 'zrodmanu',
 
   // ===== rdrkat 08/27/2026 =====
   'aveangie', 'beltrazj', 'ccardjac', 'diazgabp', 'diazjaid', 'freyandh', 'irafaeld',
   'jtamayoe', 'jujoyama', 'laquirog', 'londcrie', 'lramjua', 'luengana', 'luisfoca',
   'modreise', 'nbarjuan', 'penagjul', 'sanvcabr', 'srmunozg', 'ssantiar', 'useccarl',
   'vilaurac', 'vpereaal', 'yeisones', 'yjtorren', 'zdcabeza',
-
-  // ===== Robayotl 08/27/2026=====
-  'aldlaurn', 'almenaca', 'amtjuanp', 'andycarc', 'carvcant', 'catolics', 'cmedwiny',
-  'dakgutie', 'diegohos', 'dmonroyq', 'duxcarlo', 'kcrsanti', 'menathod', 'monteaju',
-  'nsaaveed', 'opapaula', 'osccardw', 'osoluisq', 'perhollm', 'rojastju', 'sazjh',
 
   // ===== svilaura 08/27/2026 =====
   'abrilocj', 'alvanama', 'caeliang', 'calambis', 'elpatern', 'gjorgeel', 'gomezvat',
