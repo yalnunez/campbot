@@ -228,12 +228,14 @@ while (!BOT_OPERATOR) {
                     const targetCell = cells[idx.state];
                     const success = await openDropdownAndSelectState(targetCell, agentText, 'Offline');
 
-                    if (success) {
-                        movedCount++;
-                        logDisconnection(agentLogin, 'Offline', currentState, 'Disconnect All', BOT_OPERATOR);
-                        sendMovementLog(agentLogin, currentState, 'Offline', 'Disconnect All', BOT_OPERATOR);
-                        addStatusMessage(`\u{2705} ${agentLogin} \u{2192} Offline`);
-                    } else {
+                    
+                        if (success) {
+                            movedCount++;
+                            const teamName = cells[idx.team].textContent.trim();
+                            logDisconnection(agentLogin, 'Offline', currentState, 'Outside Hours', teamName);
+                            sendMovementLog(agentLogin, currentState, 'Offline', 'Outside Operation Hours', teamName);
+                            addStatusMessage(`✅ ${agentLogin} → Offline`);
+                        } else {
                         failedCount++;
                         addStatusMessage(`\u{274C} Failed: ${agentLogin}`);
                     }
