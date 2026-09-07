@@ -3,8 +3,8 @@
 // @name         Stores VCSCOL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
 // @version      0.9.3.2
-// @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
-// @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
+// @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
+// @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
 // @author       @yalnunez
 // @match        https://prod-iad.camp.wwcs.amazon.dev/*
@@ -494,10 +494,40 @@ while (!BOT_OPERATOR) {
     ];
     const PWD_BREAK_THRESHOLD = 1215; // 20:15
 
-    function getBreakThreshold(agentName) {
+
+    function getBreakThreshold(agentName, state) {
         const login = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
-        return PWD_AGENTS.includes(login) ? PWD_BREAK_THRESHOLD : AUX_THRESHOLDS.Break;
+
+        // 1. Check ACCOMMODATION first (custom per Break/Break2)
+        if (ACCOMMODATION_AGENTS.includes(login)) {
+            if (state === 'Break') return ACCOMMODATION_BREAK1_THRESHOLD;// 10:15
+            if (state === 'Break2') return ACCOMMODATION_BREAK2_THRESHOLD;// 30:15
+        }
+
+        // 2. Check PWD (same extended threshold for both breaks)
+        if (PWD_AGENTS.includes(login)) return PWD_BREAK_THRESHOLD; // 20:15
+
+        // 3. Default threshold
+        return AUX_THRESHOLDS.Break; // 15:15
     }
+
+
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║     ACCOMMODATION AGENTS — Custom Break Thresholds          ║
+    // ║  These agents have special accommodation:                   ║
+    // ║  Break1 = 10:15 (615s) instead of 15:15 (915s)             ║
+    // ║  Break2 = 30:15 (1815s) instead of 15:15 (915s)            ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
+    const ACCOMMODATION_AGENTS = [
+        'zssegura',
+        'kevcsti',
+        'ylopezar'
+        // Add more accommodation logins here
+    ];
+    const ACCOMMODATION_BREAK1_THRESHOLD = 615;// 10:15
+    const ACCOMMODATION_BREAK2_THRESHOLD = 1815;// 30:15
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           NEW HIRE AGENTS — Extended On Contact              ║
@@ -1444,10 +1474,10 @@ ${rows}`;
                     debugLog(`${agentName} Personal - Duration: ${durationText} (${duration}s) | Personal Time: ${personalTimeText} (${personalSeconds}s) | Using: ${effectiveDurationText}`);
                 }
 
-                // ===== CHECK THRESHOLD VIOLATION (PWD for Break/Break2, New Hires for On Contact) =====
+                // ===== CHECK THRESHOLD VIOLATION (PWD/Accommodatios for Break/Break2, New Hires for On Contact) =====
                 let effectiveThreshold;
                 if (state === 'Break' || state === 'Break2') {
-                    effectiveThreshold = getBreakThreshold(agentName);
+                    effectiveThreshold = getBreakThreshold(agentName, state);
                 } else if (state === 'On Contact') {
                     // Verificar si el TM del agente está en la lista de new hires
                     const teamCheck = cells[idx.team].textContent.trim().toLowerCase();
