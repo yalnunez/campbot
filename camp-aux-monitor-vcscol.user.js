@@ -426,6 +426,7 @@ while (!BOT_OPERATOR) {
         'luribesa',
         'robayotl',
         'sandreac',
+        'admatall',
         'rdrkat',
         'svilaura'
         // Agregar o quitar TMs según sea necesario
