@@ -25,13 +25,24 @@ while (!BOT_OPERATOR) {
 
 // ===== WEBHOOK CONFIGURATION =====
 
-    const MANAGERS_WEBHOOKS = {
-        'drvamzn': 'https://hooks.chime.aws/incomingwebhooks/5bde7c99-33ab-49ef-b829-4c1f9705bcc0?token=TkJTMHVzR1p8MXxvZ0hwMUF3WXBWaFVtRDkxZUZybDBUZXhUSU9MNHdnbElyM1hINGZnOGVv',
-        'dvveland': 'https://hooks.chime.aws/incomingwebhooks/2ca54cf8-f8b2-4be0-8900-aca66d6922f6?token=ODFDQVlOMlF8MXxiSFpsR2Zib1d4SVMwQ2pCR3RDOVpvdUx5aGZ0ZlNzUnRMdHhSZUIzU1o4',
-        'sernlaur': 'https://hooks.chime.aws/incomingwebhooks/44aee192-2f97-4bc6-9c42-b9677122115b?token=UmlnMjJIb018MXxwS21pVVlsMWRGMWZNM2lGS2FJYy1SdVo0QXY5N2RBNk9BRXE1WHRxVlc0'
-    };
+const MANAGERS_WEBHOOKS = {
+    'botacami': 'insert webhook',
+    'dapenago': 'insert webhook',
+    'dapao': 'insert webhook',
+    'carvol': 'insert webhook',
+    'jrreate': 'insert webhook',
+    'oscarey': 'insert webhook',
+    'dccesped': 'insert webhook',
+    'dianaqz': 'insert webhook',
+    'josiegue': 'insert webhook',
+    'bocmirko': 'insert webhook',
+    'pamzabal': 'insert webhook',
+    'guermaha': 'insert webhook',
+    'csiers': 'insert webhook',
+    'niezinga': 'insert webhook',
+};
 
-    const MOVEMENTS_WEBHOOK = 'https://hooks.chime.aws/incomingwebhooks/b1838128-6cc5-4135-bedf-0d7692042e58?token=c0ROVXcyZXh8MXxPV01EZGRfYnVfbHJUVWxXZkhTQlZZRFVEY0V4S2RKOUpKZExhWjdnUnJz';
+    const MOVEMENTS_WEBHOOK = 'https://hooks.chime.aws/incomingwebhooks/92ebe812-d5fe-4e13-8c01-388cca0d9b33?token=eThWNmczQ3p8MXxzLW43QkVZWVBybVpWUlZzMm5OaG5DX0Q2MnhNeDUxaU9lRGhjdGxmQ1pv';
 
     const TM_TO_OM = {
 
@@ -488,8 +499,24 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const PWD_AGENTS = [
+        'angielkr',
+        'anartayl',
+        'bgupaola',
+        'dianmqui',
+        'diarizap',
+        'duqqcarl',
+        'edgmerca',
+        'juaegome',
+        'kristiqc',
+        'maribcud',
+        'mazohert',
+        'navasfrg',
+        'ninoserf',
+        'obrecarv',
+        'paulaasi',
+        'rmerceds',
         'roalvarz',
-        'duqqcarl'
+        'tarijudi'
         // Add more PWD logins here
     ];
     const PWD_BREAK_THRESHOLD = 1215; // 20:15
@@ -511,8 +538,6 @@ while (!BOT_OPERATOR) {
         return AUX_THRESHOLDS.Break; // 15:15
     }
 
-
-
     // ╔══════════════════════════════════════════════════════════════╗
     // ║     ACCOMMODATION AGENTS — Custom Break Thresholds          ║
     // ║  These agents have special accommodation:                   ║
@@ -521,7 +546,6 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const ACCOMMODATION_AGENTS = [
-        'zssegura',
         'kevcsti',
         'ylopezar'
         // Add more accommodation logins here
@@ -561,7 +585,15 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const EMAIL_EXTENDED_TMS = [
-        'yalnunez',
+        'brayandv',
+        'elsbolan',
+        'jonleoj',
+        'jugarzo',
+        'jumurcia',
+        'lauracrc',
+        'leipaula',
+        'romecin',
+        'valgarzo'
         // Agregar o quitar TMs según sea necesario
     ];
     const EMAIL_EXTENDED_THRESHOLD = 1800; // 30:00 — Solo alerta, no desconecta
@@ -575,6 +607,23 @@ while (!BOT_OPERATOR) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║     NO DISCONNECT AGENTS — Alert Only, No Auto-Offline      ║
+    // ║  These agents will NOT be moved to Offline automatically    ║
+    // ║  in any AUTO_OFFLINE_STATE. The bot will only send the      ║
+    // ║  alert to the OM when the threshold is exceeded.            ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
+    const NO_DISCONNECT_AGENTS = [
+        'calvotga',
+        'kevcsti',
+        'solacind',
+        'ylopezar',
+        'zssegura'
+        // Add more logins here as needed
+    ];
+
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           SESSION VARIABLES                                  ║
@@ -1498,12 +1547,22 @@ ${rows}`;
                 if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) {
                     // Para Email: si el TM está en EMAIL_EXTENDED_TMS, NO desconectar (solo alertar)
                     let shouldAutoOffline = AUTO_OFFLINE_STATES.includes(state);
+
+                    // Check NO_DISCONNECT_AGENTS — never auto-offline, only alert
+                    const loginCheckDisconnect = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
+                    if (NO_DISCONNECT_AGENTS.includes(loginCheckDisconnect)) {
+                        shouldAutoOffline = false;
+                    }
+
+                    // Check EMAIL_EXTENDED_TMS — no auto-offline for Email state
                     if (state === 'Email') {
                         const teamCheckOffline = cells[idx.team].textContent.trim().toLowerCase();
                         if (EMAIL_EXTENDED_TMS.includes(teamCheckOffline)) {
-                            shouldAutoOffline = false; // Solo alerta, no desconecta
+                            shouldAutoOffline = false;
                         }
                     }
+
+
 
                     if (state === 'On Contact') {
                         currentOnContactViolations.add(agentName);
