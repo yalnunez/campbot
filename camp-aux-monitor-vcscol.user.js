@@ -113,7 +113,7 @@ while (!BOT_OPERATOR) {
 
     const LOG_WEBHOOK_URL = 'https://hooks.chime.aws/incomingwebhooks/ea16df87-66ad-4eab-b1e3-37967f8fbc26?token=M2VScERzbk58MXxqVERpUmVBYmQ2MWJzNzhqbFloVk56d2tCMFk3dHNzOG5HejVEaDF2eEpJ';
 
-   // ===== UI: LEFT SIDEBAR PANEL =====
+  // ===== UI: LEFT SIDEBAR PANEL =====
 
     const banner = document.createElement('div');
     banner.style.cssText = `
@@ -426,7 +426,6 @@ while (!BOT_OPERATOR) {
         'luribesa',
         'robayotl',
         'sandreac',
-        'admatall',
         'rdrkat',
         'svilaura'
         // Agregar o quitar TMs según sea necesario
@@ -1728,3 +1727,19 @@ ${table}` }),
             pauseBtn.disabled = false;
         }
     });
+
+    pauseBtn.addEventListener('click', () => {
+        if (isMonitoring) {
+            isMonitoring = false;
+            if (monitoringTimeout) { clearTimeout(monitoringTimeout); monitoringTimeout = null; }
+            addStatusMessage('\u{23F8}\u{FE0F} Monitoring paused');
+            sendLogToWebhook();
+            startBtn.disabled = false;
+            pauseBtn.disabled = true;
+        }
+    });
+
+    pauseBtn.disabled = true;
+    addStatusMessage('v0.9.3.2 Developed by yalnunez');
+
+})();
