@@ -3,8 +3,8 @@
 // @name         Stores VCSCOL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
 // @version      0.9.3.2
-// @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
-// @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
+// @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
+// @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
 // @author       @yalnunez
 // @match        https://prod-iad.camp.wwcs.amazon.dev/*
@@ -26,7 +26,7 @@ while (!BOT_OPERATOR) {
 // ===== WEBHOOK CONFIGURATION =====
 
 const MANAGERS_WEBHOOKS = {
-    'botacami': 'insert webhook',
+    'botacami': 'https://hooks.chime.aws/incomingwebhooks/75089592-55c7-4b19-b976-4740e6ee9942?token=b1BzOW96TGV8MXw5Ykhsd0Vxc1hiMm9GREhIdW1xYVB1MXJ1T3NYWG13QkJwOWpQdjYzZk5r',
     'dapenago': 'insert webhook',
     'dapao': 'insert webhook',
     'carvol': 'insert webhook',
@@ -453,7 +453,7 @@ const MANAGERS_WEBHOOKS = {
         'Email': 90,// 0:01:30 — Disconnect to Offline
         'Break': 915,// 0:15:15 — Disconnect to Offline
         'Break2': 915,// 0:15:15 — Disconnect to Offline
-        'Break3': 0,// 0:00:00 — Immediate disconnect (any duration)
+        'Break3': 615,// 0:10:15 — Immediate disconnect (any duration)
         'Personal': 375,// 0:06:15 — Disconnect to Offline
         'Lunch': 3615,// 1:00:15 — Disconnect to Offline
         'System': 600,// 0:10:00 — Disconnect to Offline
