@@ -113,7 +113,7 @@ while (!BOT_OPERATOR) {
 
     const LOG_WEBHOOK_URL = 'https://hooks.chime.aws/incomingwebhooks/ea16df87-66ad-4eab-b1e3-37967f8fbc26?token=M2VScERzbk58MXxqVERpUmVBYmQ2MWJzNzhqbFloVk56d2tCMFk3dHNzOG5HejVEaDF2eEpJ';
 
-    // ===== UI: LEFT SIDEBAR PANEL =====
+   // ===== UI: LEFT SIDEBAR PANEL =====
 
     const banner = document.createElement('div');
     banner.style.cssText = `
@@ -228,14 +228,12 @@ while (!BOT_OPERATOR) {
                     const targetCell = cells[idx.state];
                     const success = await openDropdownAndSelectState(targetCell, agentText, 'Offline');
 
-                    
-                        if (success) {
-                            movedCount++;
-                            const teamName = cells[idx.team].textContent.trim();
-                            logDisconnection(agentLogin, 'Offline', currentState, 'Outside Hours', teamName);
-                            sendMovementLog(agentLogin, currentState, 'Offline', 'Outside Operation Hours', teamName);
-                            addStatusMessage(`✅ ${agentLogin} → Offline`);
-                        } else {
+                    if (success) {
+                        movedCount++;
+                        logDisconnection(agentLogin, 'Offline', currentState, 'Disconnect All', BOT_OPERATOR);
+                        sendMovementLog(agentLogin, currentState, 'Offline', 'Disconnect All', BOT_OPERATOR);
+                        addStatusMessage(`\u{2705} ${agentLogin} \u{2192} Offline`);
+                    } else {
                         failedCount++;
                         addStatusMessage(`\u{274C} Failed: ${agentLogin}`);
                     }
@@ -417,7 +415,7 @@ while (!BOT_OPERATOR) {
     // ║  of the standard 30:00 (1800s). Alert only, no disconnect.  ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-   const NEW_HIRE_TMS = [
+      const NEW_HIRE_TMS = [
         'camargis',
         'claraaqu',
         'cruizher',
@@ -433,6 +431,21 @@ while (!BOT_OPERATOR) {
         // Agregar o quitar TMs según sea necesario
     ];
     const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║           EMAIL EXTENDED TMs — No Disconnect on Email        ║
+    // ║  Para estos TMs, el estado Email NO desconecta al agente.   ║
+    // ║  En su lugar, solo se notifica al OM cuando el agente       ║
+    // ║  supera los 30 minutos (1800s) en Email.                    ║
+    // ║  El bot lee la columna "Team" para determinar si aplica.    ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
+    const EMAIL_EXTENDED_TMS = [
+        'yalnunez',
+        // Agregar o quitar TMs según sea necesario
+    ];
+    const EMAIL_EXTENDED_THRESHOLD = 1800; // 30:00 — Solo alerta, no desconecta
+
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           AUTO-OFFLINE STATES                                ║
@@ -1169,8 +1182,9 @@ ${rows}`;
 
                         if (success) {
                             movedCount++;
-                            logDisconnection(agentLogin, 'Offline', currentState, 'Outside Hours', agentLogin);
-                            sendMovementLog(agentLogin, currentState, 'Offline', 'Outside Operation Hours', agentLogin);
+                            const teamName = cells[idx.team].textContent.trim();
+                            logDisconnection(agentLogin, 'Offline', currentState, 'Outside Hours', teamName);
+                            sendMovementLog(agentLogin, currentState, 'Offline', 'Outside Operation Hours', teamName);
                             addStatusMessage(`✅ ${agentLogin} → Offline`);
                         } else {
                             failedCount++;
@@ -1348,12 +1362,28 @@ ${rows}`;
                     // Verificar si el TM del agente está en la lista de new hires
                     const teamCheck = cells[idx.team].textContent.trim().toLowerCase();
                     effectiveThreshold = NEW_HIRE_TMS.includes(teamCheck) ? NEW_HIRE_ON_CONTACT_THRESHOLD : AUX_THRESHOLDS['On Contact'];
+                } else if (state === 'Email') {
+                    // Verificar si el TM del agente está en la lista de Email extendido
+                    const teamCheckEmail = cells[idx.team].textContent.trim().toLowerCase();
+                    if (EMAIL_EXTENDED_TMS.includes(teamCheckEmail)) {
+                        // TM en la lista: threshold de 30 min, solo alerta (no desconecta)
+                        effectiveThreshold = EMAIL_EXTENDED_THRESHOLD;
+                    } else {
+                        // TM normal: threshold estándar de 1:30, desconecta a Offline
+                        effectiveThreshold = AUX_THRESHOLDS['Email'];
+                    }
                 } else {
                     effectiveThreshold = AUX_THRESHOLDS[state];
                 }
-
                 if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) {
-                    const shouldAutoOffline = AUTO_OFFLINE_STATES.includes(state);
+                    // Para Email: si el TM está en EMAIL_EXTENDED_TMS, NO desconectar (solo alertar)
+                    let shouldAutoOffline = AUTO_OFFLINE_STATES.includes(state);
+                    if (state === 'Email') {
+                        const teamCheckOffline = cells[idx.team].textContent.trim().toLowerCase();
+                        if (EMAIL_EXTENDED_TMS.includes(teamCheckOffline)) {
+                            shouldAutoOffline = false; // Solo alerta, no desconecta
+                        }
+                    }
 
                     if (state === 'On Contact') {
                         currentOnContactViolations.add(agentName);
@@ -1697,19 +1727,3 @@ ${table}` }),
             pauseBtn.disabled = false;
         }
     });
-
-    pauseBtn.addEventListener('click', () => {
-        if (isMonitoring) {
-            isMonitoring = false;
-            if (monitoringTimeout) { clearTimeout(monitoringTimeout); monitoringTimeout = null; }
-            addStatusMessage('\u{23F8}\u{FE0F} Monitoring paused');
-            sendLogToWebhook();
-            startBtn.disabled = false;
-            pauseBtn.disabled = true;
-        }
-    });
-
-    pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.0.1 Developed by yalnunez');
-
-})();
