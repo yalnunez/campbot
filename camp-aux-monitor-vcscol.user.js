@@ -415,77 +415,20 @@ while (!BOT_OPERATOR) {
     // ║  of the standard 30:00 (1800s). Alert only, no disconnect.  ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-    const NEW_HIRE_AGENTS = [
- // ===== camargis =====
-  'abellalo', 'agameden', 'alelpedr', 'alfange', 'anayaany', 'angietan', 'aspurp',
-  'deeduars', 'edgmerca', 'gojorgea', 'gonzakew', 'henryesm', 'jslgdo', 'jvcuella',
-  'keirajpa', 'mabelblp', 'mautgsyl', 'menadiel', 'mesahado', 'rolauras', 'svilaura',
-  'thomamex', 'villjeis',
-
-  // ===== claraaqu =====
-  'acastrjo', 'acejuans', 'andnydia', 'andrngut', 'angielkr', 'anthxm', 'beniteet',
-  'bkevalva', 'brabaron', 'caeddier', 'egueiser', 'fernjulu', 'joolaya', 'karoljul',
-  'kgojose', 'mariairr', 'montaini', 'mruiztri', 'rmorejul', 'sodavidg', 'tiquerey',
-  'uherwils', 'vjuanser',
-
-  // ===== cruizher =====
-  'abmariap', 'angjanez', 'bkcarlos', 'catacard', 'diegobas', 'edaniehe', 'gawsanti',
-  'jeseival', 'jospinao', 'kevibotp', 'lauralri', 'mateklon', 'molatati', 'moncadjx',
-  'mosmelan', 'nivballe', 'qkevinfe', 'romqdian', 'rubiocuy', 'sosagarc', 'ugdaniel',
-  'yerispme', 'zcamiloe',
-
-  // ===== florezhi =====
-  'acosnidi', 'agromari', 'albcamil', 'anyposad', 'bcardema', 'cadrioso', 'dagude',
-  'dilanmau', 'geacasti', 'givannab', 'jenifimo', 'jesuselc', 'kdiamoli', 'kmmanjar',
-  'leiddiaz', 'lesmecar', 'lstelamu', 'mendiveg', 'nitlopez', 'sbonleid', 'sixeduar',
-  'srgim', 'zuladria',
-
-  // ===== gonzylau =====
-  'amarmarc', 'angjohat', 'animbacq', 'becerjup', 'blanang', 'brigiaco', 'crzcastr',
-  'dannavro', 'davelaid', 'dianmqui', 'duqqcarl', 'ericapmo', 'espaalai', 'figuasly',
-  'judycond', 'luzuquir', 'mdayanam', 'migduart', 'ngfonsec', 'pinzonye', 'quimdavi',
-  'tccast', 'vmirey',
-
-  // ===== jcaldani =====
-  'ajenifva', 'brijaml', 'camilaqk', 'carkguzm', 'contrcam', 'cuarvico', 'delarojt',
-  'dianapma', 'germaneo', 'giradanj', 'lecamilo', 'lisethde', 'llanglor', 'lvicmoli',
-  'nacubide', 'ojohavil', 'qellalma', 'quecanol', 'vmiggar', 'wvillamb', 'yandrilo',
-  'zrodmanu',
-
-  // ===== llandine =====
-  'barrsari', 'camilfal', 'concseba', 'dayquint', 'deicyabe', 'faedwina', 'gonzylau',
-  'hcamimar', 'hemarodr', 'jairodca', 'jhopinzo', 'julioanr', 'jumejiar', 'lucasgaz',
-  'marlonsn', 'martruiv', 'nmadiana', 'ovasqjes', 'paezlauo', 'perazest', 'pereduva',
-  'reinagaj', 'silbsamu',
-
-  // ===== luribesa =====
-  'anasooba', 'andrcaiq', 'ankvarga', 'arbjeyso', 'calvocab', 'chyromer', 'danninoc',
-  'fdiegofe', 'gilodani', 'jndavidm', 'lopeztec', 'lsimonal', 'michvaru', 'muriuhar',
-  'nsalazda', 'orejuese', 'palnmari', 'rojawjul', 'sajuradx', 'samespit',
-
-  // ===== robayotl =====
-  'aldlaurn', 'almenaca', 'amtjuanp', 'andycarc', 'carvcant', 'catolics', 'cmedwiny',
-  'dakgutie', 'diegohos', 'dmonroyq', 'duxcarlo', 'kcrsanti', 'menathod', 'monteaju',
-  'nsaaveed', 'opapaula', 'osccardw', 'osoluisq', 'perhollm', 'rojastju', 'sazjh',
-        
-// ===== sandreac 08/27/2026 =====
-  'ashlieph', 'avilvjos', 'bajudyva', 'btobonpi', 'cantorvw', 'cgarzonm', 'corujuli',
-  'dillamen', 'gomezchc', 'hejeffeu', 'hsidavid', 'jaimpaul', 'jennytat', 'luimoliy',
-  'marirojk', 'mejuanse', 'mercsaid', 'ocontres', 'orojuanm', 'rodbguer', 'tortandr',
-  'wvaleriv', 'zjhuryzv',
-
-
-  // ===== rdrkat 08/27/2026 =====
-  'aveangie', 'beltrazj', 'ccardjac', 'diazgabp', 'diazjaid', 'freyandh', 'irafaeld',
-  'jtamayoe', 'jujoyama', 'laquirog', 'londcrie', 'lramjua', 'luengana', 'luisfoca',
-  'modreise', 'nbarjuan', 'penagjul', 'sanvcabr', 'srmunozg', 'ssantiar', 'useccarl',
-  'vilaurac', 'vpereaal', 'yeisones', 'yjtorren', 'zdcabeza',
-
-  // ===== svilaura 08/27/2026 =====
-  'abrilocj', 'alvanama', 'caeliang', 'calambis', 'elpatern', 'gjorgeel', 'gomezvat',
-  'gonzdanh', 'hsebacun', 'jimaceve', 'jjosepb', 'jorgabel', 'juansezo', 'kangelsh',
-  'moreomig', 'pueemanu', 'ranuadum', 'restresb', 'siergagu', 'snecheve', 'stephdub'
-        // Add more New Hire logins here
+   const NEW_HIRE_TMS = [
+        'camargis',
+        'claraaqu',
+        'cruizher',
+        'florezhi',
+        'gonzylau',
+        'jcaldani',
+        'llandine',
+        'luribesa',
+        'robayotl',
+        'sandreac',
+        'rdrkat',
+        'svilaura'
+        // Agregar o quitar TMs según sea necesario
     ];
     const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
 
@@ -1400,8 +1343,9 @@ ${rows}`;
                 if (state === 'Break' || state === 'Break2') {
                     effectiveThreshold = getBreakThreshold(agentName);
                 } else if (state === 'On Contact') {
-                    const loginCheck = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
-                    effectiveThreshold = NEW_HIRE_AGENTS.includes(loginCheck) ? NEW_HIRE_ON_CONTACT_THRESHOLD : AUX_THRESHOLDS['On Contact'];
+                    // Verificar si el TM del agente está en la lista de new hires
+                    const teamCheck = cells[idx.team].textContent.trim().toLowerCase();
+                    effectiveThreshold = NEW_HIRE_TMS.includes(teamCheck) ? NEW_HIRE_ON_CONTACT_THRESHOLD : AUX_THRESHOLDS['On Contact'];
                 } else {
                     effectiveThreshold = AUX_THRESHOLDS[state];
                 }
