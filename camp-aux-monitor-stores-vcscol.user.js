@@ -450,7 +450,7 @@ const MANAGERS_WEBHOOKS = {
         'Training': 10800,// 3:00:00 — Alert only (no disconnect)
         'Project': 10800,// 3:00:00 — Alert only (no disconnect)
         'Missed': 60,// 0:01:00 — Disconnect to Offline (2+) or Available (<2)
-        'Email': 90,// 0:01:30 — Disconnect to Offline
+        'Email': 600,// 0:10:00 — Alert only (no disconnect
         'Break': 915,// 0:15:15 — Disconnect to Offline
         'Break2': 915,// 0:15:15 — Disconnect to Offline
         'Break3': 615,// 0:10:15 — Immediate disconnect (any duration)
@@ -606,7 +606,7 @@ const MANAGERS_WEBHOOKS = {
     // ║  States NOT listed here are alert-only (no state change).   ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-    const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
+    const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'UpcomingOffline'];
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║     NO DISCONNECT AGENTS — Alert Only, No Auto-Offline      ║
