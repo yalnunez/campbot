@@ -32,14 +32,9 @@ const MANAGERS_WEBHOOKS = {
     'carvol': 'insert webhook',
     'jrreate': 'insert webhook',
     'oscarey': 'insert webhook',
-    'dccesped': 'insert webhook',
+    'linarami': 'insert webhook',
     'dianaqz': 'insert webhook',
-    'josiegue': 'insert webhook',
-    'bocmirko': 'insert webhook',
-    'pamzabal': 'insert webhook',
-    'guermaha': 'insert webhook',
-    'csiers': 'insert webhook',
-    'niezinga': 'insert webhook',
+    'josiegue': 'insert webhook'
 };
 
     const MOVEMENTS_WEBHOOK = 'https://hooks.chime.aws/incomingwebhooks/92ebe812-d5fe-4e13-8c01-388cca0d9b33?token=eThWNmczQ3p8MXxzLW43QkVZWVBybVpWUlZzMm5OaG5DX0Q2MnhNeDUxaU9lRGhjdGxmQ1pv';
