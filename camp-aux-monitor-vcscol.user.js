@@ -425,6 +425,7 @@ while (!BOT_OPERATOR) {
         'llandine',
         'luribesa',
         'robayotl',
+        'admatall',
         'sandreac',
         'rdrkat',
         'svilaura'
