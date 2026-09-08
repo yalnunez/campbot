@@ -54,12 +54,13 @@ const MANAGERS_WEBHOOKS = {
 
         // dapenago
         'araujh': 'dapenago',
-        'caroocam': 'dapenago',
         'cxfriasa': 'dapenago',
-        'rrmariap': 'dapenago',
         'scstano': 'dapenago',
+        'aradan': 'dapenago',
+        'jdiazhur': 'dapenago',
+        'storresg': 'dapenago',
         'sebasus': 'dapenago',
-
+        
         // dapao
         'elsbolan': 'dapao',
         'jugarzo': 'dapao',
