@@ -27,7 +27,7 @@ while (!BOT_OPERATOR) {
 
 const MANAGERS_WEBHOOKS = {
     'botacami': 'https://hooks.chime.aws/incomingwebhooks/75089592-55c7-4b19-b976-4740e6ee9942?token=b1BzOW96TGV8MXw5Ykhsd0Vxc1hiMm9GREhIdW1xYVB1MXJ1T3NYWG13QkJwOWpQdjYzZk5r',
-    'dapenago': 'insert webhook',
+    'dapenago': 'https://hooks.chime.aws/incomingwebhooks/1b8e3bcf-a69a-4c96-b268-14ab4156edb7?token=RTQ3OEJ4eXZ8MXxnOUtIMWlEYk42NDl0amZlTTJCWi1xX1J3dng5LUxqanFEOF85ZzFuUnRv',
     'dapao': 'insert webhook',
     'carvol': 'insert webhook',
     'jrreate': 'insert webhook',
