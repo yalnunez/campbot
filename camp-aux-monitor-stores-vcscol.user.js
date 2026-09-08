@@ -49,6 +49,8 @@ const MANAGERS_WEBHOOKS = {
         'mosquchr': 'botacami',
         'perginna': 'botacami',
         'alopzg': 'botacami',
+        'jorgmune': 'botacami',
+        'lunarva': 'botacami',
 
         // dapenago
         'araujh': 'dapenago',
