@@ -28,7 +28,7 @@ while (!BOT_OPERATOR) {
     const MANAGERS_WEBHOOKS = {
         'drvamzn': 'https://hooks.chime.aws/incomingwebhooks/5bde7c99-33ab-49ef-b829-4c1f9705bcc0?token=TkJTMHVzR1p8MXxvZ0hwMUF3WXBWaFVtRDkxZUZybDBUZXhUSU9MNHdnbElyM1hINGZnOGVv',
         'dvveland': 'https://hooks.chime.aws/incomingwebhooks/2ca54cf8-f8b2-4be0-8900-aca66d6922f6?token=ODFDQVlOMlF8MXxiSFpsR2Zib1d4SVMwQ2pCR3RDOVpvdUx5aGZ0ZlNzUnRMdHhSZUIzU1o4',
-        'sernlaur': 'https://hooks.chime.aws/incomingwebhooks/44aee192-2f97-4bc6-9c42-b9677122115b?token=UmlnMjJIb018MXxwS21pVVlsMWRGMWZNM2lGS2FJYy1SdVo0QXY5N2RBNk9BRXE1WHRxVlc0'
+        'sernlaur': 'https://hooks.chime.aws/incomingwebhooks/5f55fda1-14a8-41dc-9a93-65e70033a760?token=bDRwd1pISXh8MXxndy1tNzdfd2U4elVJRVMzaTk0Q3RwRGxfS25MbUlvQXBidnZXeENCZTU4'
     };
 
     const MOVEMENTS_WEBHOOK = 'https://hooks.chime.aws/incomingwebhooks/b1838128-6cc5-4135-bedf-0d7692042e58?token=c0ROVXcyZXh8MXxPV01EZGRfYnVfbHJUVWxXZkhTQlZZRFVEY0V4S2RKOUpKZExhWjdnUnJz';
