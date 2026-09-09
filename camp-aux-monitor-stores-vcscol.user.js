@@ -1,6 +1,6 @@
 
 // ==UserScript==
-// @name         Stores VCSCOL Camp bot by yalnunez
+// @name         Stores Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
 // @version      0.9.3.2
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
