@@ -1,8 +1,8 @@
 
 // ==UserScript==
-// @name         SDS VCSCOL Camp bot by yalnunez
+// @name         SDS Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.2
+// @version      0.9.3.3
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
@@ -60,13 +60,16 @@ while (!BOT_OPERATOR) {
         'augucasx': 'dvveland',
         'jcaldani': 'dvveland',
 
-        // sernlaur
+         // sernlaur
         'callealm': 'sernlaur',
         'erasergi': 'sernlaur',
         'humbrolo': 'sernlaur',
         'jslvaaa': 'sernlaur',
         'ospinabo': 'sernlaur',
-        'rdrkat': 'sernlaur'
+        'rdrkat': 'sernlaur',
+        'barrsari': 'sernlaur',
+        'Romeyess': 'sernlaur',
+        'nszambra': 'sernlaur'
     };
 
     function getManagerWebhook(teamName) {
@@ -76,7 +79,7 @@ while (!BOT_OPERATOR) {
     }
 
     const TEAM_WEBHOOKS = {
-         // ===== Dani =====
+         // ===== drvamzn =====
         'yalnunez': 'https://hooks.chime.aws/incomingwebhooks/3791ebb3-125b-40d8-85d0-b845fbd48d53?token=NkR6Y0NwOWR8MXxweGhWOFZRLVVxQTd2eUZ4S1B1Y2tEVm5uSXJZd2JwZXlLNlJPd2NXRW9n',
         'saaimara': 'https://hooks.chime.aws/incomingwebhooks/1b679063-b661-439b-b11a-778c5bb76277?token=SEx2ZndBTFR8MXxOd204VC1NVU9HNmF1b2JON2U0N0xqc2RhX296ckhGdzdwdGZMSU1XbEhB',
         'cvillabo': 'https://hooks.chime.aws/incomingwebhooks/d4182f95-dd4d-485a-ae75-44005a6f5326?token=S3BZU3FLam98MXxick9KOUlLUDhWQWh5am1RRlVVWW45a0YtazFPTzdUY1dfNVd0eWxZd3Zv',
@@ -90,7 +93,7 @@ while (!BOT_OPERATOR) {
         'builessa': 'https://hooks.chime.aws/incomingwebhooks/40ee2183-ba10-4333-b728-2ee3cdc3c440?token=VXZZbzdCa3Z8MXxEc005bXNRWWh4anc2N3ZIZEc0b3hlR193MnZpZGpLZjJJcmFiR095RGFF',
         'mahechla': 'https://hooks.chime.aws/incomingwebhooks/715cd178-45fa-447b-8e5c-4f50dc078e2e?token=V2hXOVdKMEZ8MXxkVkVuS2J5ajFOR3VOU05VbFVBODRXaTA2dFQ4bnFvelpzR2pZMkIxeVZz',
 
-         // ===== Dave =====
+         // ===== dvveland =====
         'gonzylau': 'https://hooks.chime.aws/incomingwebhooks/854ac974-16f9-4933-bff8-27eea4787851?token=Y0pGdnRkS2p8MXxPQXdGTEdoazVuSVg1VlVvVFB1RG9SbFRadXMwZE1WeGlUX0VBVmc4RVQ0',
         'cruizher': 'https://hooks.chime.aws/incomingwebhooks/c1d2932a-81e9-4cd6-a081-27b42c789556?token=aFpVUm9RUm58MXxXalBfTVZ6Sk9WaXF5TXk2ZGhlTjlzck1ENGFPQ0pWS2d5ZjgwWFhXOHlv',
         'llandine': 'https://hooks.chime.aws/incomingwebhooks/adc38fcf-a13f-4523-a5c1-f5610e78bd02?token=NlBqRDN1ODJ8MXxiN3F0Q2ZoMlVrV3lnaG81d1QxQldpZkVObXMxN1RmbVFMR0UtRGUwdkh3',
@@ -102,13 +105,16 @@ while (!BOT_OPERATOR) {
         'aguscasx': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
         'robayotl': 'https://hooks.chime.aws/incomingwebhooks/7ec236de-cafb-4010-bbd2-20aec7409d79?token=T2hzNnF1Szh8MXxJQzJiM01Pd1FGRkw3MHdWOVFBWHlKRjJUNUNHTkFwMG9lakloV0ZDR3hn',
 
-     // ===== Lau =====
-        'callealm': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'erasergi': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'humbrolo': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'jslvaaa': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'ospinabo': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'rdrkat': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz'
+     // ===== sernlaur =====
+        'callealm': 'https://hooks.chime.aws/incomingwebhooks/b23c66b1-d436-4727-acd6-968c6f9a4bba?token=SDBtbTFBZzJ8MXxhWEtJTlI1OGVjLW85VF9TanVrQnJSeE5sd1BtRE96NkcyZGk5M0k4al9r',
+        'erasergi': 'https://hooks.chime.aws/incomingwebhooks/806305b1-8469-471b-94b8-7c0bd379144d?token=RENPMTY2S2h8MXx3aEpvRmNGbUFaYjNkamlUVmU4djU2R0RQZmZOVGRFa3RhVmR1WlltTUNv',
+        'humbrolo': 'https://hooks.chime.aws/incomingwebhooks/7a95dbee-c5fa-4729-8ca8-5bdf3c6514a2?token=S2RGWUdTZDR8MXxGQ3JCLWNfWVA4QkhEa1dBenRKYkF2THk1YXYyTnpJRWZEalhtaWRqbXFV',
+        'jslvaaa': 'https://hooks.chime.aws/incomingwebhooks/0b301010-84c7-4145-aaf0-16fde4d497b3?token=TzBSbk9RU0p8MXxVeWlWSDZUZjFZR2tBVmNxLUhrc05DYkRMVVFJUnNrS2dFNHlJZEpmS2tJ',
+        'ospinabo': 'https://hooks.chime.aws/incomingwebhooks/89d45d57-f811-4f00-98ac-b81e27d40bfc?token=UXE5clYwb3V8MXx3YlVLMlg2UVU2b250OHY5cXJ2TDl2TUlmckE4cXlsR1BiMFJxX2Z4Yjlz',
+        'rdrkat': 'https://hooks.chime.aws/incomingwebhooks/9c3061ea-4f64-4abd-b608-9823f1a926df?token=WTd0SjQ5UXV8MXxvR056b0FpeTI5by1ZUTFrZEJPSlI2RGdXY21KR3ktejdBWkd2SWZvNzNZ',
+        'barrsari': 'https://hooks.chime.aws/incomingwebhooks/f65e17ed-dac8-45f4-b5f9-fc30163b4b58?token=WmNWOGhDV298MXxXa1VTM1RXbkU2YWxIcFF1WGJHcWp0RG44Z1MxZU52R1daMEs5Yld3WWk4',
+        'Romeyess': 'https://hooks.chime.aws/incomingwebhooks/baf0d1b4-b284-47b8-8a40-f46863b5c055?token=S0k1R2dMUU98MXwxWHpxc0QwNVBGWXNtaTd5U1lXMFAxR1FvcF9LU211UDhPc3R2bnVNRThF',
+        'nszambra': 'https://hooks.chime.aws/incomingwebhooks/d5f0431f-5f52-420d-84c3-2e66b3e63523?token=b09XczFwTmp8MXwxb2JHX0V5X0d1VTk2NEdFdG1LRnR2UjlBbWJ1QzVDbXEtLTEyNDVaVDNZ',
     };
 
     const LOG_WEBHOOK_URL = 'https://hooks.chime.aws/incomingwebhooks/ea16df87-66ad-4eab-b1e3-37967f8fbc26?token=M2VScERzbk58MXxqVERpUmVBYmQ2MWJzNzhqbFloVk56d2tCMFk3dHNzOG5HejVEaDF2eEpJ';
@@ -1741,6 +1747,6 @@ ${table}` }),
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.2 Developed by yalnunez');
+    addStatusMessage('v0.9.3.3 Developed by yalnunez');
 
 })();
