@@ -1,4 +1,3 @@
-
 // ==UserScript==
 // @name         Stores VCSCOL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
