@@ -474,19 +474,19 @@ initializeWebhooks().then(function(ready) {
 
     const AUX_THRESHOLDS = {
         'Available': 10800,//3:00:00 — Alert only (no disconnect)
-        'Meeting': 10800,// 3:00:00 — Alert only (no disconnect)
-        'Training': 10800,// 3:00:00 — Alert only (no disconnect)
-        'Project': 10800,// 3:00:00 — Alert only (no disconnect)
+        'Meeting': 7200,// 2:00:00 — Alert only (no disconnect)
+        'Training': 7200,// 2:00:00 — Alert only (no disconnect)
+        'Project': 7200,// 2:00:00 — Alert only (no disconnect)
         'Missed': 60,// 0:01:00 — Disconnect to Offline (2+) or Available (<2)
         'Email': 600,// 0:10:00 — Disconnect to Offline
-        'Break': 915,// 0:15:15 — Disconnect to Offline
-        'Break2': 915,// 0:15:15 — Disconnect to Offline
+        'Break': 920,// 0:15:15 — Disconnect to Offline
+        'Break2': 920,// 0:15:15 — Disconnect to Offline
         'Break3': 615,// 0:10:15 — Disconnect to Offline
         'Personal': 375,// 0:06:15 — Disconnect to Offline
         'Lunch': 3615,// 1:00:15 — Disconnect to Offline
         'System': 600,// 0:10:00 — Disconnect to Offline
         'On Contact': 1200,// 0:20:00 — Alert only (no disconnect)
-        'UpcomingOffline': 60// 0:01:00 — Disconnect to Offline
+        'UpcomingOffline': 300// 0:05:00 — Alert only (no disconnect)
     };
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           OPERATION HOURS — Auto-Disconnect Outside Hours    ║
@@ -644,7 +644,7 @@ initializeWebhooks().then(function(ready) {
     // ║  States NOT listed here are alert-only (no state change).   ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-    const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'UpcomingOffline'];
+    const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System'];
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║     NO DISCONNECT AGENTS — Alert Only, No Auto-Offline      ║
