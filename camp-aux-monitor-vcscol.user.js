@@ -1,4 +1,3 @@
-
 // ==UserScript==
 // @name         SDS Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
@@ -10,11 +9,17 @@
 // @match        https://prod-iad.camp.wwcs.amazon.dev/*
 // @match        https://prod-fra.camp.wwcs.amazon.dev/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @connect      hooks.chime.aws
+// @connect      amazon.sharepoint.com
+// @connect      cdn.sheetjs.com
+
 // ==/UserScript==
 
 (function () {
     'use strict';
+
 let BOT_OPERATOR = '';
 while (!BOT_OPERATOR) {
     BOT_OPERATOR = (prompt('Enter your login to start the bot:') || '').trim().toLowerCase();
@@ -23,101 +28,221 @@ while (!BOT_OPERATOR) {
     }
 }
 
-// ===== WEBHOOK CONFIGURATION =====
 
-    const MANAGERS_WEBHOOKS = {
-        'drvamzn': 'https://hooks.chime.aws/incomingwebhooks/5bde7c99-33ab-49ef-b829-4c1f9705bcc0?token=TkJTMHVzR1p8MXxvZ0hwMUF3WXBWaFVtRDkxZUZybDBUZXhUSU9MNHdnbElyM1hINGZnOGVv',
-        'dvveland': 'https://hooks.chime.aws/incomingwebhooks/2ca54cf8-f8b2-4be0-8900-aca66d6922f6?token=ODFDQVlOMlF8MXxiSFpsR2Zib1d4SVMwQ2pCR3RDOVpvdUx5aGZ0ZlNzUnRMdHhSZUIzU1o4',
-        'sernlaur': 'https://hooks.chime.aws/incomingwebhooks/5f55fda1-14a8-41dc-9a93-65e70033a760?token=bDRwd1pISXh8MXxndy1tNzdfd2U4elVJRVMzaTk0Q3RwRGxfS25MbUlvQXBidnZXeENCZTU4'
-    };
+// ===== SHAREPOINT CONFIG =====
+var SHAREPOINT_SITE = 'amazon.sharepoint.com';
+var SHAREPOINT_SITE_PATH = '/sites/Yalnunez';
+var EXCEL_DIRECT_URL = 'https://amazon.sharepoint.com/:x:/r/sites/SDSColombia/_layouts/15/Doc.aspx?sourcedoc=%7B770FE60A-246F-4EA5-8773-62441D98795F%7D&file=Heimdall%20Webhook%20Config.xlsx&action=default&mobileredirect=true';
+var EXCEL_DOWNLOAD_URL = 'https://amazon.sharepoint.com/sites/SDSColombia/_api/web/GetFileByServerRelativeUrl(\'/sites/SDSColombia/Shared%20Documents/Heimdall%20Bot%20(Camp%20Bot)/Heimdall%20Webhook%20Config.xlsx\')/$value';
 
-    const MOVEMENTS_WEBHOOK = 'https://hooks.chime.aws/incomingwebhooks/b1838128-6cc5-4135-bedf-0d7692042e58?token=c0ROVXcyZXh8MXxPV01EZGRfYnVfbHJUVWxXZkhTQlZZRFVEY0V4S2RKOUpKZExhWjdnUnJz';
+// ===== DYNAMIC WEBHOOK VARIABLES =====
+var MANAGERS_WEBHOOKS = {};
+var TM_TO_OM = {};
+var TEAM_WEBHOOKS = {};
+var MOVEMENTS_WEBHOOK = '';
+var LOG_WEBHOOK_URL = '';
+var webhooksLoaded = false;
+var lastWebhookLoad = 0;
+var WEBHOOK_CACHE_DURATION = 30 * 60 * 1000;
 
-    const TM_TO_OM = {
-        // drvamzn
-        'admatall': 'drvamzn',
-        'saaimara': 'drvamzn',
-        'sandreac': 'drvamzn',
-        'yalnunez': 'drvamzn',
-        'cvillabo': 'drvamzn',
-        'veraardi': 'drvamzn',
-        'omariacb': 'drvamzn',
-        'josefrzp': 'drvamzn',
-        'svilaura': 'drvamzn',
-        'builessa': 'drvamzn',
-        'mahechla': 'drvamzn',
-        'jluckert': 'drvamzn',
+// ===== LOAD FROM SHAREPOINT (API v1.0 + SheetJS) =====
+function loadWebhooksFromSharePoint() {
+    return new Promise(function(resolve, reject) {
+        console.log('[Heimdall] 📡 Cargando webhooks desde SharePoint...');
 
-        // dvveland
-        'camargis': 'dvveland',
-        'cruizher': 'dvveland',
-        'claraaqu': 'dvveland',
-        'llandine': 'dvveland',
-        'luribesa': 'dvveland',
-        'robayotl': 'dvveland',
-        'florezhi': 'dvveland',
-        'gonzylau': 'dvveland',
-        'augucasx': 'dvveland',
-        'jcaldani': 'dvveland',
+        // Paso 1: Cargar la librería SheetJS si no está cargada
+        if (typeof XLSX === 'undefined') {
+            console.log('[Heimdall] 📦 Cargando librería SheetJS...');
+            var script = document.createElement('script');
+            script.src = 'https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js';
+            script.onload = function() {
+                console.log('[Heimdall] ✅ SheetJS cargada');
+                downloadAndParseExcel(resolve, reject);
+            };
+            script.onerror = function() {
+                console.error('[Heimdall] ❌ No se pudo cargar SheetJS');
+                reject('SHEETJS_LOAD_ERROR');
+            };
+            document.head.appendChild(script);
+        } else {
+            downloadAndParseExcel(resolve, reject);
+        }
+    });
+}
 
-         // sernlaur
-        'callealm': 'sernlaur',
-        'erasergi': 'sernlaur',
-        'humbrolo': 'sernlaur',
-        'jslvaaa': 'sernlaur',
-        'ospinabo': 'sernlaur',
-        'rdrkat': 'sernlaur',
-        'barrsari': 'sernlaur',
-        'Romeyess': 'sernlaur',
-        'nszambra': 'sernlaur'
-    };
+function downloadAndParseExcel(resolve, reject) {
+    GM_xmlhttpRequest({
+        method: 'GET',
+        url: EXCEL_DOWNLOAD_URL,
+        responseType: 'arraybuffer',
+        headers: {
+            'Accept': 'application/octet-stream'
+        },
+        onload: function(response) {
+            try {
+                if (response.status === 200) {
+                    console.log('[Heimdall] 📥 Excel descargado, parseando...');
 
-    function getManagerWebhook(teamName) {
-        const tm = teamName.trim().toLowerCase();
-        const om = TM_TO_OM[tm];
-        return om ? MANAGERS_WEBHOOKS[om] : null;
+                    // Parsear el Excel con SheetJS
+                    var data = new Uint8Array(response.response);
+                    var workbook = XLSX.read(data, { type: 'array' });
+
+                    // Buscar la hoja Webhook_Config
+                    var sheetName = 'Webhook_Config';
+                    if (!workbook.SheetNames.includes(sheetName)) {
+                        // Si no existe, usar la primera hoja
+                        sheetName = workbook.SheetNames[0];
+                        console.warn('[Heimdall] ⚠️ Hoja "Webhook_Config" no encontrada. Usando: ' + sheetName);
+                    }
+
+                    var sheet = workbook.Sheets[sheetName];
+                    var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+                    parseWebhookData(rows);
+                    webhooksLoaded = true;
+                    lastWebhookLoad = Date.now();
+                    console.log('[Heimdall] ✅ Webhooks cargados desde SharePoint');
+                    console.log('[Heimdall]    Managers: ' + Object.keys(MANAGERS_WEBHOOKS).length);
+                    console.log('[Heimdall]    TM→OM: ' + Object.keys(TM_TO_OM).length);
+                    console.log('[Heimdall]    Team webhooks: ' + Object.keys(TEAM_WEBHOOKS).length);
+                    resolve(true);
+
+                } else if (response.status === 401 || response.status === 403) {
+                    console.warn('[Heimdall] ⚠️ No autenticado en SharePoint. Abre el Excel en otra pestaña.');
+                    reject('AUTH_REQUIRED');
+                } else {
+                    console.error('[Heimdall] ❌ Error HTTP ' + response.status);
+                    reject('HTTP_' + response.status);
+                }
+            } catch (e) {
+                console.error('[Heimdall] ❌ Error parseando Excel:', e);
+                reject('PARSE_ERROR');
+            }
+        },
+        onerror: function(error) {
+            console.error('[Heimdall] ❌ Error de conexión:', error);
+            reject('CONNECTION_ERROR');
+        }
+    });
+}
+
+// ===== PARSER (igual que antes) =====
+function parseWebhookData(rows) {
+    MANAGERS_WEBHOOKS = {};
+    TM_TO_OM = {};
+    TEAM_WEBHOOKS = {};
+    MOVEMENTS_WEBHOOK = '';
+    LOG_WEBHOOK_URL = '';
+    var currentSection = null;
+
+    for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var cellA = (row[0] || '').toString().trim();
+        var cellB = (row[1] || '').toString().trim();
+        var cellC = (row[2] || '').toString().trim();
+
+        if (cellA === 'MANAGERS WEBHOOKS') { currentSection = 'MANAGERS'; continue; }
+        if (cellA === 'TM TO OM MAPPING') { currentSection = 'TM_TO_OM'; continue; }
+        if (cellA === 'TEAM WEBHOOKS') { currentSection = 'TEAM_WEBHOOKS'; continue; }
+        if (cellA === 'SPECIAL WEBHOOKS') { currentSection = 'SPECIAL'; continue; }
+
+        if (!cellA || cellA === 'Manager (OM)' || cellA === 'Team Member (TM)' ||
+            cellA === 'Team Member' || cellA === 'Webhook Name' || cellA.indexOf('⚠️') === 0) {
+            continue;
+        }
+
+        switch (currentSection) {
+            case 'MANAGERS':
+                if (cellA && cellB && cellB.indexOf('https://') === 0) {
+                    MANAGERS_WEBHOOKS[cellA.toLowerCase()] = cellB;
+                }
+                break;
+            case 'TM_TO_OM':
+                if (cellA && cellB) {
+                    TM_TO_OM[cellA.toLowerCase()] = cellB.toLowerCase();
+                }
+                break;
+            case 'TEAM_WEBHOOKS':
+                if (cellA && cellC && cellC.indexOf('https://') === 0) {
+                    TEAM_WEBHOOKS[cellA.toLowerCase()] = cellC;
+                    if (cellB && !TM_TO_OM[cellA.toLowerCase()]) {
+                        TM_TO_OM[cellA.toLowerCase()] = cellB.toLowerCase();
+                    }
+                }
+                break;
+            case 'SPECIAL':
+                if (cellA === 'MOVEMENTS_WEBHOOK' && cellC) { MOVEMENTS_WEBHOOK = cellC; }
+                if (cellA === 'LOG_WEBHOOK_URL' && cellC) { LOG_WEBHOOK_URL = cellC; }
+                break;
+        }
     }
 
-    const TEAM_WEBHOOKS = {
-         // ===== drvamzn =====
-        'yalnunez': 'https://hooks.chime.aws/incomingwebhooks/3791ebb3-125b-40d8-85d0-b845fbd48d53?token=NkR6Y0NwOWR8MXxweGhWOFZRLVVxQTd2eUZ4S1B1Y2tEVm5uSXJZd2JwZXlLNlJPd2NXRW9n',
-        'saaimara': 'https://hooks.chime.aws/incomingwebhooks/1b679063-b661-439b-b11a-778c5bb76277?token=SEx2ZndBTFR8MXxOd204VC1NVU9HNmF1b2JON2U0N0xqc2RhX296ckhGdzdwdGZMSU1XbEhB',
-        'cvillabo': 'https://hooks.chime.aws/incomingwebhooks/d4182f95-dd4d-485a-ae75-44005a6f5326?token=S3BZU3FLam98MXxick9KOUlLUDhWQWh5am1RRlVVWW45a0YtazFPTzdUY1dfNVd0eWxZd3Zv',
-        'sandreac': 'https://hooks.chime.aws/incomingwebhooks/a6fe665f-2736-4058-abf5-fc59cddfb425?token=czJpREdCNUR8MXxJd0J0NXp5UE1QSmV3Z1RWQURkN2NuRjh4YndJZDJNNmxfTllEdTVfSGw4',
-        'admatall': 'https://hooks.chime.aws/incomingwebhooks/55ca143d-2a02-4a2f-a6de-4f4d313886fb?token=WlVVZXN6eml8MXxRYmpleFRYc3pFWGw2QXh5R2FKLWdveExFOEVqLW5ZUFBzS252Wk91NzFz',
-        'veraardi': 'https://hooks.chime.aws/incomingwebhooks/9e61e821-58b3-477f-8bf1-f05c494798a1?token=cmlLckFJVkt8MXwwaGNOQmdQSmVFTmgzdng2c1FmNmlWSlkxZlUxcE85NEo1ajFUdGU4c2Jz',
-        'jluckert': 'https://hooks.chime.aws/incomingwebhooks/388a5cbd-0bd5-42ec-b3e9-9fe5091cb144?token=MGFHZDlhdW18MXxMQU05TTFqOW00ei1RU25KNm4yRHhDVERvWDlHY1BTTHBUX1plQkhTbjVF',
-        'omariacb': 'https://hooks.chime.aws/incomingwebhooks/207a83cc-53b0-46ed-becd-06ea51f2a776?token=TG15b0pEQ018MXxHQkpJZ2xMYi1WOXRyOF9nQUdYcDNjbkRDOUpLTVJqdGZNQktsUVloNXBr',
-        'josefrzp': 'https://hooks.chime.aws/incomingwebhooks/c3b952c0-87b0-455f-b46c-057f9e454038?token=QmREWXBONDd8MXwwbEhsYm04ZVpJcUlMT2J1ZFYzZUR3QWlvb3pIcW1WRVRBcjZ2T09RajZB',
-        'svilaura': 'https://hooks.chime.aws/incomingwebhooks/544da09e-8cd7-4a17-932a-7ddd05ef44f6?token=elNJSG1hWGh8MXwtNzI3RE52My1RcTJhSEtCa1o5T2hicHQ3c3VNc19WY3JVTEN4Q1ZxOHlv',
-        'builessa': 'https://hooks.chime.aws/incomingwebhooks/40ee2183-ba10-4333-b728-2ee3cdc3c440?token=VXZZbzdCa3Z8MXxEc005bXNRWWh4anc2N3ZIZEc0b3hlR193MnZpZGpLZjJJcmFiR095RGFF',
-        'mahechla': 'https://hooks.chime.aws/incomingwebhooks/715cd178-45fa-447b-8e5c-4f50dc078e2e?token=V2hXOVdKMEZ8MXxkVkVuS2J5ajFOR3VOU05VbFVBODRXaTA2dFQ4bnFvelpzR2pZMkIxeVZz',
+    GM_setValue('cached_MANAGERS_WEBHOOKS', JSON.stringify(MANAGERS_WEBHOOKS));
+    GM_setValue('cached_TM_TO_OM', JSON.stringify(TM_TO_OM));
+    GM_setValue('cached_TEAM_WEBHOOKS', JSON.stringify(TEAM_WEBHOOKS));
+    GM_setValue('cached_MOVEMENTS_WEBHOOK', MOVEMENTS_WEBHOOK);
+    GM_setValue('cached_LOG_WEBHOOK_URL', LOG_WEBHOOK_URL);
+    GM_setValue('cached_timestamp', Date.now());
+    console.log('[Heimdall] 💾 Webhooks guardados en cache local');
+}
 
-         // ===== dvveland =====
-        'gonzylau': 'https://hooks.chime.aws/incomingwebhooks/854ac974-16f9-4933-bff8-27eea4787851?token=Y0pGdnRkS2p8MXxPQXdGTEdoazVuSVg1VlVvVFB1RG9SbFRadXMwZE1WeGlUX0VBVmc4RVQ0',
-        'cruizher': 'https://hooks.chime.aws/incomingwebhooks/c1d2932a-81e9-4cd6-a081-27b42c789556?token=aFpVUm9RUm58MXxXalBfTVZ6Sk9WaXF5TXk2ZGhlTjlzck1ENGFPQ0pWS2d5ZjgwWFhXOHlv',
-        'llandine': 'https://hooks.chime.aws/incomingwebhooks/adc38fcf-a13f-4523-a5c1-f5610e78bd02?token=NlBqRDN1ODJ8MXxiN3F0Q2ZoMlVrV3lnaG81d1QxQldpZkVObXMxN1RmbVFMR0UtRGUwdkh3',
-        'luribesa': 'https://hooks.chime.aws/incomingwebhooks/5366bd61-770d-4ace-a496-1870010d1317?token=b21MeWpMcjZ8MXx5cmxfbm5lbVFlRUJCdWdGV2FBbDhJVVRpZW1mSTFRTGZjb2huZjhNTXZn',
-        'camargis': 'https://hooks.chime.aws/incomingwebhooks/d167f698-1c19-4780-9fe6-00251348bd3f?token=RGoyTlVHSFB8MXxxNGZIVi1vZWs0Ny0wYW42ckN1YzE4UXpWb0RNaDd6YXpqQ0diZm5jZHdB',
-        'claraaqu': 'https://hooks.chime.aws/incomingwebhooks/6cc7fcfa-e146-47b0-a077-86d535cfb4eb?token=VlhCc1FwdUl8MXxVVkdDN1dYMjdwemY2RlM4M1RKZ2FFS0x2X1pkMjNUSm5FcWthMnVIWkpF',
-        'jcaldani': 'https://hooks.chime.aws/incomingwebhooks/b764256b-33e2-466f-b795-db1e4c026c5a?token=VVE1U2prM018MXxZLVVwRUQ1TW1HZFNXSnQ3Y3FtR0JsOUZGUllKUzdoUEwzZGhvZHZxX2pJ',
-        'florezhi': 'https://hooks.chime.aws/incomingwebhooks/3e53e6f5-b579-4b74-bcdf-244b82251d5c?token=Znpra3dtazV8MXxpSzZhZjg3ZjE1aURyTldUUFNFX2ZuVEUzYVZ0aXRmTU1idWRnZm81cWhF',
-        'aguscasx': 'https://hooks.chime.aws/incomingwebhooks/ab46dce3-8b29-42ae-8747-39966a9caed3?token=S2tUWnJ0VmF8MXxQOWI0cmNJdmpnOHhad1J5SVJXa0tTc2o5bVBkblhmdmgxNy1tbW16aVBz',
-        'robayotl': 'https://hooks.chime.aws/incomingwebhooks/7ec236de-cafb-4010-bbd2-20aec7409d79?token=T2hzNnF1Szh8MXxJQzJiM01Pd1FGRkw3MHdWOVFBWHlKRjJUNUNHTkFwMG9lakloV0ZDR3hn',
+// ===== FALLBACK: CACHE LOCAL =====
+function loadWebhooksFromCache() {
+    try {
+        MANAGERS_WEBHOOKS = JSON.parse(GM_getValue('cached_MANAGERS_WEBHOOKS', '{}'));
+        TM_TO_OM = JSON.parse(GM_getValue('cached_TM_TO_OM', '{}'));
+        TEAM_WEBHOOKS = JSON.parse(GM_getValue('cached_TEAM_WEBHOOKS', '{}'));
+        MOVEMENTS_WEBHOOK = GM_getValue('cached_MOVEMENTS_WEBHOOK', '');
+        LOG_WEBHOOK_URL = GM_getValue('cached_LOG_WEBHOOK_URL', '');
 
-     // ===== sernlaur =====
-        'callealm': 'https://hooks.chime.aws/incomingwebhooks/b23c66b1-d436-4727-acd6-968c6f9a4bba?token=SDBtbTFBZzJ8MXxhWEtJTlI1OGVjLW85VF9TanVrQnJSeE5sd1BtRE96NkcyZGk5M0k4al9r',
-        'erasergi': 'https://hooks.chime.aws/incomingwebhooks/806305b1-8469-471b-94b8-7c0bd379144d?token=RENPMTY2S2h8MXx3aEpvRmNGbUFaYjNkamlUVmU4djU2R0RQZmZOVGRFa3RhVmR1WlltTUNv',
-        'humbrolo': 'https://hooks.chime.aws/incomingwebhooks/7a95dbee-c5fa-4729-8ca8-5bdf3c6514a2?token=S2RGWUdTZDR8MXxGQ3JCLWNfWVA4QkhEa1dBenRKYkF2THk1YXYyTnpJRWZEalhtaWRqbXFV',
-        'jslvaaa': 'https://hooks.chime.aws/incomingwebhooks/0b301010-84c7-4145-aaf0-16fde4d497b3?token=TzBSbk9RU0p8MXxVeWlWSDZUZjFZR2tBVmNxLUhrc05DYkRMVVFJUnNrS2dFNHlJZEpmS2tJ',
-        'ospinabo': 'https://hooks.chime.aws/incomingwebhooks/89d45d57-f811-4f00-98ac-b81e27d40bfc?token=UXE5clYwb3V8MXx3YlVLMlg2UVU2b250OHY5cXJ2TDl2TUlmckE4cXlsR1BiMFJxX2Z4Yjlz',
-        'rdrkat': 'https://hooks.chime.aws/incomingwebhooks/9c3061ea-4f64-4abd-b608-9823f1a926df?token=WTd0SjQ5UXV8MXxvR056b0FpeTI5by1ZUTFrZEJPSlI2RGdXY21KR3ktejdBWkd2SWZvNzNZ',
-        'barrsari': 'https://hooks.chime.aws/incomingwebhooks/f65e17ed-dac8-45f4-b5f9-fc30163b4b58?token=WmNWOGhDV298MXxXa1VTM1RXbkU2YWxIcFF1WGJHcWp0RG44Z1MxZU52R1daMEs5Yld3WWk4',
-        'Romeyess': 'https://hooks.chime.aws/incomingwebhooks/baf0d1b4-b284-47b8-8a40-f46863b5c055?token=S0k1R2dMUU98MXwxWHpxc0QwNVBGWXNtaTd5U1lXMFAxR1FvcF9LU211UDhPc3R2bnVNRThF',
-        'nszambra': 'https://hooks.chime.aws/incomingwebhooks/d5f0431f-5f52-420d-84c3-2e66b3e63523?token=b09XczFwTmp8MXwxb2JHX0V5X0d1VTk2NEdFdG1LRnR2UjlBbWJ1QzVDbXEtLTEyNDVaVDNZ',
-    };
+        var hasData = Object.keys(MANAGERS_WEBHOOKS).length > 0 &&
+                      Object.keys(TM_TO_OM).length > 0 &&
+                      Object.keys(TEAM_WEBHOOKS).length > 0;
+        if (hasData) {
+            webhooksLoaded = true;
+            console.log('[Heimdall] 📦 Webhooks cargados desde cache local');
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error('[Heimdall] ❌ Error cargando cache:', e);
+        return false;
+    }
+}
 
-    const LOG_WEBHOOK_URL = 'https://hooks.chime.aws/incomingwebhooks/ea16df87-66ad-4eab-b1e3-37967f8fbc26?token=M2VScERzbk58MXxqVERpUmVBYmQ2MWJzNzhqbFloVk56d2tCMFk3dHNzOG5HejVEaDF2eEpJ';
+// ===== INICIALIZACIÓN =====
+function initializeWebhooks() {
+    if (webhooksLoaded && (Date.now() - lastWebhookLoad) < WEBHOOK_CACHE_DURATION) {
+        return Promise.resolve(true);
+    }
+    return loadWebhooksFromSharePoint().catch(function(error) {
+        console.warn('[Heimdall] ⚠️ Falló SharePoint (' + error + '). Intentando cache...');
+        if (loadWebhooksFromCache()) { return true; }
+        console.error('[Heimdall] ❌ No hay webhooks disponibles.');
+        return false;
+    });
+}
+
+function refreshWebhooks() {
+    lastWebhookLoad = 0;
+    return initializeWebhooks();
+}
+
+function getManagerWebhook(teamName) {
+    var tm = teamName.trim().toLowerCase();
+    var om = TM_TO_OM[tm];
+    return om ? MANAGERS_WEBHOOKS[om] : null;
+}
+
+// ===== CARGAR WEBHOOKS (sin bloquear el UI) =====
+initializeWebhooks().then(function(ready) {
+    if (ready) {
+        console.log('[Heimdall] ✅ Webhooks listos');
+    } else {
+        console.warn('[Heimdall] ⚠️ Webhooks no disponibles');
+        alert('⚠️ Heimdall: No se pudieron cargar los webhooks.\nAbre el Excel en SharePoint y recarga CAMP.\n\n' + EXCEL_DIRECT_URL);
+    }
+});
 
   // ===== UI: LEFT SIDEBAR PANEL =====
 
