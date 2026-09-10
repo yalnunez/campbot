@@ -1,4 +1,3 @@
-
 // ==UserScript==
 // @name         Stores Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
@@ -449,14 +448,14 @@ const MANAGERS_WEBHOOKS = {
         'Training': 10800,// 3:00:00 — Alert only (no disconnect)
         'Project': 10800,// 3:00:00 — Alert only (no disconnect)
         'Missed': 60,// 0:01:00 — Disconnect to Offline (2+) or Available (<2)
-        'Email': 600,// 0:10:00 — Alert only (no disconnect
+        'Email': 600,// 0:10:00 — Disconnect to Offline
         'Break': 915,// 0:15:15 — Disconnect to Offline
         'Break2': 915,// 0:15:15 — Disconnect to Offline
-        'Break3': 615,// 0:10:15 — Immediate disconnect (any duration)
+        'Break3': 615,// 0:10:15 — Disconnect to Offline
         'Personal': 375,// 0:06:15 — Disconnect to Offline
         'Lunch': 3615,// 1:00:15 — Disconnect to Offline
         'System': 600,// 0:10:00 — Disconnect to Offline
-        'On Contact': 1800,// 0:30:00 — Alert only (no disconnect)
+        'On Contact': 1200,// 0:20:00 — Alert only (no disconnect)
         'UpcomingOffline': 60// 0:01:00 — Disconnect to Offline
     };
     // ╔══════════════════════════════════════════════════════════════╗
@@ -559,21 +558,12 @@ const MANAGERS_WEBHOOKS = {
     // ╚══════════════════════════════════════════════════════════════╝
 
       const NEW_HIRE_TMS = [
-        'camargis',
-        'claraaqu',
-        'cruizher',
-        'florezhi',
-        'gonzylau',
-        'jcaldani',
-        'llandine',
-        'luribesa',
-        'robayotl',
-        'sandreac',
-        'rdrkat',
-        'svilaura'
+        'perginna',
+        'adouglyg',
+        'storresg'
         // Agregar o quitar TMs según sea necesario
     ];
-    const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
+    const NEW_HIRE_ON_CONTACT_THRESHOLD = 1800; // 30:00
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           EMAIL EXTENDED TMs — No Disconnect on Email        ║
