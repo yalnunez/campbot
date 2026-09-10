@@ -1,7 +1,8 @@
+
 // ==UserScript==
-// @name         Stores Heimdall bot by yalnunez
+// @name         Stores VCSCOL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.2
+// @version      0.9.3.3
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
@@ -9,11 +10,16 @@
 // @match        https://prod-iad.camp.wwcs.amazon.dev/*
 // @match        https://prod-fra.camp.wwcs.amazon.dev/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @connect      hooks.chime.aws
+// @connect      amazon.sharepoint.com
+// @connect      cdn.sheetjs.com
 // ==/UserScript==
 
 (function () {
     'use strict';
+
 let BOT_OPERATOR = '';
 while (!BOT_OPERATOR) {
     BOT_OPERATOR = (prompt('Enter your login to start the bot:') || '').trim().toLowerCase();
@@ -22,196 +28,221 @@ while (!BOT_OPERATOR) {
     }
 }
 
-// ===== WEBHOOK CONFIGURATION =====
 
-const MANAGERS_WEBHOOKS = {
-    'botacami': 'https://hooks.chime.aws/incomingwebhooks/75089592-55c7-4b19-b976-4740e6ee9942?token=b1BzOW96TGV8MXw5Ykhsd0Vxc1hiMm9GREhIdW1xYVB1MXJ1T3NYWG13QkJwOWpQdjYzZk5r',
-    'dapenago': 'https://hooks.chime.aws/incomingwebhooks/1b8e3bcf-a69a-4c96-b268-14ab4156edb7?token=RTQ3OEJ4eXZ8MXxnOUtIMWlEYk42NDl0amZlTTJCWi1xX1J3dng5LUxqanFEOF85ZzFuUnRv',
-    'dapao': 'insert webhook',
-    'carvol': 'insert webhook',
-    'jrreate': 'insert webhook',
-    'oscarey': 'insert webhook',
-    'linarami': 'insert webhook',
-    'dianaqz': 'insert webhook',
-    'josiegue': 'insert webhook'
-};
+// ===== SHAREPOINT CONFIG =====
+var SHAREPOINT_SITE = 'amazon.sharepoint.com';
+var SHAREPOINT_SITE_PATH = '/sites/Yalnunez';
+var EXCEL_DIRECT_URL = 'https://amazon.sharepoint.com/:x:/r/sites/SDSColombia/_layouts/15/Doc.aspx?sourcedoc=%7BC7BB19DD-35B8-493E-9DD8-285DFDDC8B82%7D&file=Stores%20Heimdall%20Webhook%20Config.xlsx&action=default&mobileredirect=true';
+var EXCEL_DOWNLOAD_URL = 'https://amazon.sharepoint.com/sites/SDSColombia/_api/web/GetFileByServerRelativeUrl(\'/sites/SDSColombia/Shared%20Documents/Heimdall%20Bot%20(Camp%20Bot)/Stores%20Heimdall%20Webhook%20Config.xlsx\')/$value';
 
-    const MOVEMENTS_WEBHOOK = 'https://hooks.chime.aws/incomingwebhooks/92ebe812-d5fe-4e13-8c01-388cca0d9b33?token=eThWNmczQ3p8MXxzLW43QkVZWVBybVpWUlZzMm5OaG5DX0Q2MnhNeDUxaU9lRGhjdGxmQ1pv';
+// ===== DYNAMIC WEBHOOK VARIABLES =====
+var MANAGERS_WEBHOOKS = {};
+var TM_TO_OM = {};
+var TEAM_WEBHOOKS = {};
+var MOVEMENTS_WEBHOOK = '';
+var LOG_WEBHOOK_URL = '';
+var webhooksLoaded = false;
+var lastWebhookLoad = 0;
+var WEBHOOK_CACHE_DURATION = 30 * 60 * 1000;
 
-    const TM_TO_OM = {
+// ===== LOAD FROM SHAREPOINT (API v1.0 + SheetJS) =====
+function loadWebhooksFromSharePoint() {
+    return new Promise(function(resolve, reject) {
+        console.log('[Heimdall] 📡 Cargando webhooks desde SharePoint...');
 
-        // botacami
-        'adouglyg': 'botacami',
-        'chrixp': 'botacami',
-        'fonjairo': 'botacami',
-        'glafonso': 'botacami',
-        'mosquchr': 'botacami',
-        'perginna': 'botacami',
-        'alopzg': 'botacami',
-        'jorgmune': 'botacami',
-        'lunarva': 'botacami',
+        // Paso 1: Cargar la librería SheetJS si no está cargada
+        if (typeof XLSX === 'undefined') {
+            console.log('[Heimdall] 📦 Cargando librería SheetJS...');
+            var script = document.createElement('script');
+            script.src = 'https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js';
+            script.onload = function() {
+                console.log('[Heimdall] ✅ SheetJS cargada');
+                downloadAndParseExcel(resolve, reject);
+            };
+            script.onerror = function() {
+                console.error('[Heimdall] ❌ No se pudo cargar SheetJS');
+                reject('SHEETJS_LOAD_ERROR');
+            };
+            document.head.appendChild(script);
+        } else {
+            downloadAndParseExcel(resolve, reject);
+        }
+    });
+}
 
-        // dapenago
-        'araujh': 'dapenago',
-        'cxfriasa': 'dapenago',
-        'scstano': 'dapenago',
-        'aradan': 'dapenago',
-        'jdiazhur': 'dapenago',
-        'storresg': 'dapenago',
-        'sebasus': 'dapenago',
-        
-        // dapao
-        'elsbolan': 'dapao',
-        'jugarzo': 'dapao',
-        'jumurcia': 'dapao',
-        'lauracrc': 'dapao',
-        'leipaula': 'dapao',
-        'romecin': 'dapao',
-        'valgarzo': 'dapao',
+function downloadAndParseExcel(resolve, reject) {
+    GM_xmlhttpRequest({
+        method: 'GET',
+        url: EXCEL_DOWNLOAD_URL,
+        responseType: 'arraybuffer',
+        headers: {
+            'Accept': 'application/octet-stream'
+        },
+        onload: function(response) {
+            try {
+                if (response.status === 200) {
+                    console.log('[Heimdall] 📥 Excel descargado, parseando...');
 
-        // carvol
-        'acordead': 'carvol',
-        'dabroche': 'carvol',
-        'fqvn': 'carvol',
-        'ilauraca': 'carvol',
-        'josealso': 'carvol',
-        'rivediaj': 'carvol',
+                    // Parsear el Excel con SheetJS
+                    var data = new Uint8Array(response.response);
+                    var workbook = XLSX.read(data, { type: 'array' });
 
-        // jrreate
-        'alvazlu': 'jrreate',
-        'dirubio': 'jrreate',
-        'gmezzmz': 'jrreate',
-        'isblanco': 'jrreate',
+                    // Buscar la hoja Webhook_Config
+                    var sheetName = 'Webhook_Config';
+                    if (!workbook.SheetNames.includes(sheetName)) {
+                        // Si no existe, usar la primera hoja
+                        sheetName = workbook.SheetNames[0];
+                        console.warn('[Heimdall] ⚠️ Hoja "Webhook_Config" no encontrada. Usando: ' + sheetName);
+                    }
 
-        // oscarey
-        'foscaldo': 'oscarey',
-        'jullanos': 'oscarey',
-        'puentngi': 'oscarey',
-        'ricaua': 'oscarey',
+                    var sheet = workbook.Sheets[sheetName];
+                    var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-        // dccesped
-        'catanolc': 'dccesped',
-        'cubin': 'dccesped',
-        'gomezsas': 'dccesped',
-        'javdiazp': 'dccesped',
+                    parseWebhookData(rows);
+                    webhooksLoaded = true;
+                    lastWebhookLoad = Date.now();
+                    console.log('[Heimdall] ✅ Webhooks cargados desde SharePoint');
+                    console.log('[Heimdall]    Managers: ' + Object.keys(MANAGERS_WEBHOOKS).length);
+                    console.log('[Heimdall]    TM→OM: ' + Object.keys(TM_TO_OM).length);
+                    console.log('[Heimdall]    Team webhooks: ' + Object.keys(TEAM_WEBHOOKS).length);
+                    resolve(true);
 
-        // dianaqz
-        'bcesarfe': 'dianaqz',
-        'julmartq': 'dianaqz',
-        'romeiroi': 'dianaqz',
+                } else if (response.status === 401 || response.status === 403) {
+                    console.warn('[Heimdall] ⚠️ No autenticado en SharePoint. Abre el Excel en otra pestaña.');
+                    reject('AUTH_REQUIRED');
+                } else {
+                    console.error('[Heimdall] ❌ Error HTTP ' + response.status);
+                    reject('HTTP_' + response.status);
+                }
+            } catch (e) {
+                console.error('[Heimdall] ❌ Error parseando Excel:', e);
+                reject('PARSE_ERROR');
+            }
+        },
+        onerror: function(error) {
+            console.error('[Heimdall] ❌ Error de conexión:', error);
+            reject('CONNECTION_ERROR');
+        }
+    });
+}
 
-        // josiegue
-        'garzonje': 'josiegue',
-        'jgomzmn': 'josiegue',
-        'maurojas': 'josiegue',
-        'oscagrey': 'josiegue',
+// ===== PARSER (igual que antes) =====
+function parseWebhookData(rows) {
+    MANAGERS_WEBHOOKS = {};
+    TM_TO_OM = {};
+    TEAM_WEBHOOKS = {};
+    MOVEMENTS_WEBHOOK = '';
+    LOG_WEBHOOK_URL = '';
+    var currentSection = null;
 
-        // bocmirko
-        'anfeivez': 'bocmirko',
-        'sfrancn': 'bocmirko',
+    for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        var cellA = (row[0] || '').toString().trim();
+        var cellB = (row[1] || '').toString().trim();
+        var cellC = (row[2] || '').toString().trim();
 
-        // pamzabal
-        'monqlaur': 'pamzabal',
+        if (cellA === 'MANAGERS WEBHOOKS') { currentSection = 'MANAGERS'; continue; }
+        if (cellA === 'TM TO OM MAPPING') { currentSection = 'TM_TO_OM'; continue; }
+        if (cellA === 'TEAM WEBHOOKS') { currentSection = 'TEAM_WEBHOOKS'; continue; }
+        if (cellA === 'SPECIAL WEBHOOKS') { currentSection = 'SPECIAL'; continue; }
 
-        // guermaha
-        'fvictorm': 'guermaha',
+        if (!cellA || cellA === 'Manager (OM)' || cellA === 'Team Member (TM)' ||
+            cellA === 'Team Member' || cellA === 'Webhook Name' || cellA.indexOf('⚠️') === 0) {
+            continue;
+        }
 
-        // csiers
-        'gomzmnz': 'csiers',
-
-        // niezinga
-        'arakathe': 'niezinga'
-    };
-
-    function getManagerWebhook(teamName) {
-        const tm = teamName.trim().toLowerCase();
-        const om = TM_TO_OM[tm];
-        return om ? MANAGERS_WEBHOOKS[om] : null;
+        switch (currentSection) {
+            case 'MANAGERS':
+                if (cellA && cellB && cellB.indexOf('https://') === 0) {
+                    MANAGERS_WEBHOOKS[cellA.toLowerCase()] = cellB;
+                }
+                break;
+            case 'TM_TO_OM':
+                if (cellA && cellB) {
+                    TM_TO_OM[cellA.toLowerCase()] = cellB.toLowerCase();
+                }
+                break;
+            case 'TEAM_WEBHOOKS':
+                if (cellA && cellC && cellC.indexOf('https://') === 0) {
+                    TEAM_WEBHOOKS[cellA.toLowerCase()] = cellC;
+                    if (cellB && !TM_TO_OM[cellA.toLowerCase()]) {
+                        TM_TO_OM[cellA.toLowerCase()] = cellB.toLowerCase();
+                    }
+                }
+                break;
+            case 'SPECIAL':
+                if (cellA === 'MOVEMENTS_WEBHOOK' && cellC) { MOVEMENTS_WEBHOOK = cellC; }
+                if (cellA === 'LOG_WEBHOOK_URL' && cellC) { LOG_WEBHOOK_URL = cellC; }
+                break;
+        }
     }
 
-    const TEAM_WEBHOOKS = {
+    GM_setValue('cached_MANAGERS_WEBHOOKS', JSON.stringify(MANAGERS_WEBHOOKS));
+    GM_setValue('cached_TM_TO_OM', JSON.stringify(TM_TO_OM));
+    GM_setValue('cached_TEAM_WEBHOOKS', JSON.stringify(TEAM_WEBHOOKS));
+    GM_setValue('cached_MOVEMENTS_WEBHOOK', MOVEMENTS_WEBHOOK);
+    GM_setValue('cached_LOG_WEBHOOK_URL', LOG_WEBHOOK_URL);
+    GM_setValue('cached_timestamp', Date.now());
+    console.log('[Heimdall] 💾 Webhooks guardados en cache local');
+}
 
-        // ===== botacami =====
-        'mosquchr': 'https://hooks.chime.aws/incomingwebhooks/e980a2a7-53dc-4a55-b5d6-344b54ddc10a?token=R3dOODViQ0l8MXxKZ2hwVG1GUVI2YUVQRnFRRG0wWUNwVzZleDFrZmMtUGc0MnlwYU5wUFB3',
-        'glafonso': 'https://hooks.chime.aws/incomingwebhooks/85f94744-c00c-4d66-b514-0ed20da1f9bd?token=emt0VWdMZ2R8MXxGV2ROOEVtWlJVT195aVBDLXhRSnJLWF9CeHpIUVp4Ml9rVDVWZU5OMUdB',
-        'adouglyg': 'https://hooks.chime.aws/incomingwebhooks/a6b4d590-150a-4c93-a915-085894e891df?token=V1BtdWNNcXV8MXxXQnU2aHZpYUc1VzgwMzB4VERINVJZemJxaHZpUEpsSWdMbVhlVnFLRlk0',
-        'chrixp': 'https://hooks.chime.aws/incomingwebhooks/8ca95275-49b6-4eed-8e3c-df8e686c5851?token=YUI0d2lHNFd8MXw0dGlxQ3J3NnlhU0QwcUR6U2Z2c1NsVTd3TG9ZNjJpY0dDMWNBaUxXR3BJ',
-        'perginna': 'https://hooks.chime.aws/incomingwebhooks/4eeaae78-313a-40ef-a541-8f8cbe3bc67a?token=ODQ2Y0tIOEd8MXxrWUVnRldJQVVEcHV4bWRBOU1XdHdudDg3bXBkc0R1ZHktMkNfXzd4QUJJ',
-        'fonjairo': 'https://hooks.chime.aws/incomingwebhooks/ef0cc879-68a4-463a-88f5-01617f0f79d0?token=VFpnYWJtb1J8MXwtc2FCLVBHMi16Uk54MkxCdTBvY0lUdGlnQTBzUU9DbDQtOVFwQ0tCLWJ3',
+// ===== FALLBACK: CACHE LOCAL =====
+function loadWebhooksFromCache() {
+    try {
+        MANAGERS_WEBHOOKS = JSON.parse(GM_getValue('cached_MANAGERS_WEBHOOKS', '{}'));
+        TM_TO_OM = JSON.parse(GM_getValue('cached_TM_TO_OM', '{}'));
+        TEAM_WEBHOOKS = JSON.parse(GM_getValue('cached_TEAM_WEBHOOKS', '{}'));
+        MOVEMENTS_WEBHOOK = GM_getValue('cached_MOVEMENTS_WEBHOOK', '');
+        LOG_WEBHOOK_URL = GM_getValue('cached_LOG_WEBHOOK_URL', '');
 
-        // ===== dapenago =====
-        'rrmariap': 'https://hooks.chime.aws/incomingwebhooks/d473c0b6-1909-47ac-8ad4-e2bb9b611363?token=eUQ2Z1oyQlp8MXxpQl8weThfOXFjSTZFbmlPX3NtV2dXUzVnY0w4SlJlS3ViTjVySXB0YlpB',
-        'caroocam': 'https://hooks.chime.aws/incomingwebhooks/cc0535a5-6b4c-4aa9-b0b7-6d8780432878?token=WFh2QVd4QzN8MXx2dmxPbVJOUlJQbWY5OEFEbHlSRzlOcGZ4eTM2RExSS0NMcmZ1U2IxZmhn',
-        'scstano': 'https://hooks.chime.aws/incomingwebhooks/e327cebb-165e-4e89-89ac-c1c41893d1e7?token=YThKVXVoQzZ8MXwwZkRLRV9aTGE4OGZuSmRpNEhINkoxU3hzeTVPTHdfd3ZSN3YwYnF0T3ZN',
-        'sebasus': 'https://hooks.chime.aws/incomingwebhooks/4b6ea5c5-0a06-49e1-b5fa-362f0d968afc?token=RnlkT2hiNzl8MXxOVWhrVjRIakVGYjduZWhaSzZaRUx5VXhkODN2bURkclBLbVpNbjlQR0xN',
-        'cxfriasa': 'https://hooks.chime.aws/incomingwebhooks/b68e07e9-e000-4436-9209-7824ab4aa34d?token=OTFTd0ZmdGF8MXw0dEtNaktzVlVPZUNUMnl4R0pTa2ZwM0pQN3dicWJRWW5SNzJYb0xNalY4',
-        'araujh': 'https://hooks.chime.aws/incomingwebhooks/0dc06b02-970a-42f8-bb68-e91a9e54c0a9?token=UVR0aURqeEl8MXwwSHpzb05SSkhkUW5YR0llOWVDd0NzNzlBYXllNlh3anpFaC1mQVVjRTNr',
+        var hasData = Object.keys(MANAGERS_WEBHOOKS).length > 0 &&
+                      Object.keys(TM_TO_OM).length > 0 &&
+                      Object.keys(TEAM_WEBHOOKS).length > 0;
+        if (hasData) {
+            webhooksLoaded = true;
+            console.log('[Heimdall] 📦 Webhooks cargados desde cache local');
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error('[Heimdall] ❌ Error cargando cache:', e);
+        return false;
+    }
+}
 
-        // ===== dapao =====
-        'leipaula': 'https://hooks.chime.aws/incomingwebhooks/ad922b11-efc9-480b-9419-a2fc24f05708?token=T09yMU9ocnp8MXxPaHV5U3dBRHpteXVVaWU5SVZhSF9CaUZUZTNDUDZFSDBaRWRWTmY1U0JZ',
-        'jumurcia': 'https://hooks.chime.aws/incomingwebhooks/3d13e280-2449-4ec5-aabe-6d05f9a42f3d?token=Q3NtYkRPZVl8MXxHeVF2QWdDYjJCWEpBVGw2OERxQ2JPWkduMUdFLXpXQkQwb09TdFFwYW9v',
-        'elsbolan': 'https://hooks.chime.aws/incomingwebhooks/01ead5ac-1b9d-4144-94d8-647351c44792?token=RkdHWTdrcEl8MXxuVkpKNXR6WWtqMGRpdEJ6YnI3S3Bpc0JtOGNaaUdHMURpdko1U21sMWxj',
-        'romecin': 'https://hooks.chime.aws/incomingwebhooks/ea789459-0b77-458c-8b4e-2a99034fec16?token=S0kyTmRJM3Z8MXxsSkkwSzR5MVZJc3pwUWdhX0xhekFqcFdjRHhOakZ3UG9MdW03YjIwUEow',
-        'jugarzo': 'https://hooks.chime.aws/incomingwebhooks/981f2b19-005a-48dc-b7dd-2fd340a2da05?token=TTZDSmxiT0R8MXxLYjRMX3J6NTFBVi1ZaXY2dUF3WFVfamp5U0tOVUhfZlZVRWtoN3lwaHNJ',
-        'lauracrc': 'https://hooks.chime.aws/incomingwebhooks/56df88c1-775f-4581-b4e2-f830b29659c3?token=NG9LMFduSW18MXxCcEg3SkdQSmw1Wm5PUU40QWlWWHl1Tkd3WDg5UkdBUFJlelBOWW05Rl9B',
-        'valgarzo': 'https://hooks.chime.aws/incomingwebhooks/76fd7ed8-c192-4e91-92da-20d97ad5db7d?token=TjhuNkQ0Sk18MXxGMFBDLWVTOWtsb3F1cXpqX1l3bTc1Q3FzNnU2QWRFeHZMNWU5ZjlNcElr',
+// ===== INICIALIZACIÓN =====
+function initializeWebhooks() {
+    if (webhooksLoaded && (Date.now() - lastWebhookLoad) < WEBHOOK_CACHE_DURATION) {
+        return Promise.resolve(true);
+    }
+    return loadWebhooksFromSharePoint().catch(function(error) {
+        console.warn('[Heimdall] ⚠️ Falló SharePoint (' + error + '). Intentando cache...');
+        if (loadWebhooksFromCache()) { return true; }
+        console.error('[Heimdall] ❌ No hay webhooks disponibles.');
+        return false;
+    });
+}
 
-        // ===== carvol =====
-        'dabroche': 'https://hooks.chime.aws/incomingwebhooks/e5e7cb5f-6b01-4e05-b5c9-d4b3af41ec8b?token=clNWQlFta2Z8MXxmYWVIM3lrbDhHZmlNVmVMQUhjSGZpV1FvSGctTVRzUEFyZy1OUzRMT25n',
-        'ilauraca': 'https://hooks.chime.aws/incomingwebhooks/6b40180d-6118-4fcb-b84e-e2d438884494?token=R0Vsb0gxM2R8MXxWYzBGNWJxZ3NZSnNURmI2blJNRmtXNnItckxwYzc2LWs0emI0Y2tPZ05F',
-        'rivediaj': 'https://hooks.chime.aws/incomingwebhooks/f846f855-9767-4859-b7a0-57a48b16dd83?token=a3UzRjlFMEZ8MXxVMGJ4UEpfR2tTbG43SG9QbDRma3ZzdVZwWWRjTTVVVUFrbV9GcGRvb2FZ',
-        'josealso': 'https://hooks.chime.aws/incomingwebhooks/8a4c6173-01db-4ad7-81e5-0b436f2c67f9?token=NlU3RlRjazN8MXxrTFN3MnB5NTZLM0EzWlVlaVJQS1BwRE5lMkl2MV96bzdTNEFMczR3dk0w',
-        'fqvn': 'https://hooks.chime.aws/incomingwebhooks/10272106-de33-41d0-824f-522405b70348?token=YWNJd0hYdkN8MXxjcHJLMVdWU1Y3TFE3LXYxbDJNZG1qSFdDOFhVZWpRSy1sUTBwVVJkcmFr',
-        'acordead': 'https://hooks.chime.aws/incomingwebhooks/9800228c-46cd-4841-ae6b-eccde0ad3506?token=Uzd6a1pjR2F8MXxOZXdEbHBUN0RpU25GUEtubTA1MWtGaHZmeVliOTFNMlNRSHVUYmt3VUtZ',
+function refreshWebhooks() {
+    lastWebhookLoad = 0;
+    return initializeWebhooks();
+}
 
-        // ===== jrreate =====
-        'isblanco': 'https://hooks.chime.aws/incomingwebhooks/06f936a5-6205-43a9-b84a-352c8260b997?token=VGpQVTBJbk98MXxxUmtmcnhqeDVrbGRIQkJlcm9CbWxCa210dDVyeWl2bUpESDhvTWlDc0hr',
-        'gmezzmz': 'https://hooks.chime.aws/incomingwebhooks/37feb654-d56d-4fc5-9912-be959c940a33?token=Nk5rSXpXVkp8MXxPNU1sVVJvdWtDUGtWLWRCLWtDeHVqekpLSF9mZFEzMlN4aURIdGhpSGxF',
-        'alvazlu': 'https://hooks.chime.aws/incomingwebhooks/fd21465d-76e0-43e2-94a0-6394172cac4f?token=dVEzVThNM0F8MXxoTVNXd19Xa1JCSHVJclZPaFhfOVMzcTVPRzVodlF0Q2ZRRmRhaWdnWmFB',
-        'dirubio': 'https://hooks.chime.aws/incomingwebhooks/c5091374-2f94-44da-b079-872bc12d64e5?token=amVBNjI1NkJ8MXx4ZjJpbzI4RHJGelowaGg5VS1fdU1sZEs4a05IcFJ6UHI0c1p5QXJPT1Jr',
+function getManagerWebhook(teamName) {
+    var tm = teamName.trim().toLowerCase();
+    var om = TM_TO_OM[tm];
+    return om ? MANAGERS_WEBHOOKS[om] : null;
+}
 
-        // ===== oscarey =====
-        'ricaua': 'https://hooks.chime.aws/incomingwebhooks/8738582f-357f-4bac-a77c-1ea4beadf7af?token=Yzl6YTlGY2N8MXxocTdOOF9mQ0lJYmxfdkpadGVISXA4N241Rm1uc0hyQ3RFRUJxZVRhdmxz',
-        'puentngi': 'https://hooks.chime.aws/incomingwebhooks/eafe56da-ca33-40b0-85c7-16e60c9b2324?token=ZzV2b1EzMWl8MXxPVW5OZDE3NEJDY29rakVDUlRncmVUTk45aFVjUXlraTY4UlZuM0JDSG5r',
-        'foscaldo': 'https://hooks.chime.aws/incomingwebhooks/30cef95b-2707-4065-a629-0e98f3cc9a26?token=aEd0TFlobnl8MXxuTmpRQU42aEJRbm1MenR4OFJ3Q19ZRVppVGFWTEJPUFlJVW83YXlqZGtN',
-        'jullanos': 'https://hooks.chime.aws/incomingwebhooks/e6eac925-4ba0-42ed-905e-25720ed96cbf?token=TGdLbE81MG58MXx1bU9CSzFjdFZWc0tlOUNWdG8zbzRrWEI2am1qVjF6WXI1Q3JYQmRLLTFV',
-
-        // ===== dccesped =====
-        'cubin': 'https://hooks.chime.aws/incomingwebhooks/c464019c-834a-4bb9-b0f8-bf185deaeb53?token=QkROakJKNWt8MXxQS0xHOXhnXzhzekpJemFHRXVsWDEwOUc4eHk1X3pmMnJvOWpMUmhzY1dv',
-        'gomezsas': 'https://hooks.chime.aws/incomingwebhooks/8cccef03-093c-4225-a127-28d3047c0977?token=V0dEVXNWMVZ8MXw5Q0VFTVM2dkZaMDVJanR2a3MzcDl3cG1UdWRFdHRHdWI4SHVlTW5iSFNv',
-        'javdiazp': 'https://hooks.chime.aws/incomingwebhooks/b6529684-892b-4fcb-8809-561330dc3f9e?token=ZnQ0d3dGRXF8MXxVbkxSdTc1QmVzNUk1WHFjdzE1cE9ZY25LN0ExTnVNdG1lOUc3TU4tU3dF',
-        'catanolc': 'https://hooks.chime.aws/incomingwebhooks/6760f8b8-6b07-4369-93cf-2ef7a09aeb5e?token=QkhwR1puYnB8MXxMcGRsRjFWa2drdllhQzExY0M4dTlBbmdwT1NfMVVmWWRJOGdhTEdoOFpJ',
-
-        // ===== dianaqz =====
-        'bcesarfe': 'https://hooks.chime.aws/incomingwebhooks/280412e8-947b-4e52-8786-489350ed320d?token=SFo5eTNVWXB8MXxxRG9MeElaZkhQVEZLeEdFYUhMM0N1eG91MENBaUpibDhhNWoxVFdlN1NJ',
-        'julmartq': 'https://hooks.chime.aws/incomingwebhooks/30927300-10ec-4292-b672-6b7d4e1b8076?token=NGgwOU1KeEJ8MXw2dHkzb2FoeWpWeEdteTFqQnlzRXgxeHQtQXF1UXlzSXlNbkpNWHMxQVRj',
-        'romeiroi': 'https://hooks.chime.aws/incomingwebhooks/fd117c86-2a90-42f5-82cb-bc3aa5590036?token=ajFLOE1ZQnF8MXwyLVg5NW0tTzdFcTBLTW5OejFUd2tsQzBVdURvQW1aVktEVHRnMjZrY3NZ',
-
-        // ===== josiegue =====
-        'garzonje': 'https://hooks.chime.aws/incomingwebhooks/e38ecc5b-4b35-44c9-96b1-eabf8c4f8706?token=dFBMeFNhd0d8MXxSYlpuUzRXd2NJczk5dEE5NV9yV2VuVl9WOEVBeHBJVWhwTTRfbEJfVTJJ',
-        'jgomzmn': 'https://hooks.chime.aws/incomingwebhooks/83f5bf38-bcce-46a0-8bc7-fc8a02e2849f?token=UHhIOG9qRGd8MXx2cmhUT0tQMFdaSXdXa2pSZDBncFpOX2NBUHdpb3ZmTHVMTnBYRjViQWZZ',
-        'maurojas': 'https://hooks.chime.aws/incomingwebhooks/8529c290-9319-4ff7-b378-be00d9364c66?token=ZnJ0bnRvbXJ8MXxnT25ZRjFLdnNHU2RiZTFLd0p4a0haTjJ5RFRyVXB4Vk9hN2QwUExjaXBF',
-        'oscagrey': 'https://hooks.chime.aws/incomingwebhooks/a90b4b8b-8db4-424a-946d-c57988965dd0?token=Y1puN3dVazZ8MXxvSnd6V2dpT1VtWV84eEdzeU9zbUJaUS1CaVRqZFhZU1VXaFg2OUV2SDVR',
-
-        // ===== bocmirko =====
-        'sfrancn': 'https://hooks.chime.aws/incomingwebhooks/3a189e08-8626-4459-8489-cae0c64ea86c?token=RHplcUF4TGh8MXxSTlN2RG1HSEM5ZkhURnpnWWlDem03YzhJNlRwczRlbHdxVXhCbzNTakRn',
-        'anfeivez': 'https://hooks.chime.aws/incomingwebhooks/ebb28f2d-f5e6-498d-b81a-6ef3b5aae2d4?token=MmNzWktBcHl8MXxVTWRkdFZZekcya0ViQlBiQ3RhSUszd0dIOEdDR0FsSWZvM1cxZ1g1emhB',
-
-        // ===== pamzabal =====
-        'monqlaur': 'https://hooks.chime.aws/incomingwebhooks/c480b690-7612-4af8-ae98-92e3cd94d2c8?token=QzM3d0VXS1Z8MXxXZlcyRTBhb1pHTno3VnMyQ1o2UDdxLV9qeEZBTVdSTUd2eVl6X2JPeGtN',
-
-        // ===== guermaha =====
-        'fvictorm': 'https://hooks.chime.aws/incomingwebhooks/27ee8b8f-764a-4c55-abaa-440ff57de00c?token=MVpjRjlhaXF8MXwxbTdGX2piUEd0RVA1V3hQNV9mYnFGSksyRjhGeTRjSFdXZ01mWmEySmNZ',
-
-        // ===== csiers =====
-        'gomzmnz': 'https://hooks.chime.aws/incomingwebhooks/62ab6a34-3482-4ca0-b298-f26e60d7dec9?token=WlpuNmpDQUZ8MXxzN25qem8tRzltcnhoaWJOYllnSUlzcTVpSE9xZHdINGlVSjJaNUF5SUdj',
-
-        // ===== niezinga =====
-        'arakathe': 'https://hooks.chime.aws/incomingwebhooks/0d598005-4aff-4012-805a-433db7e60473?token=U3ZSWXFnbDh8MXxkNWdSSXRyNjRTV1dwem9rQzhIaGZzTHdwZDRSMUJYNllPSXMtZHdtajU4'
-    };
-
-    const LOG_WEBHOOK_URL = 'https://hooks.chime.aws/incomingwebhooks/ea16df87-66ad-4eab-b1e3-37967f8fbc26?token=M2VScERzbk58MXxqVERpUmVBYmQ2MWJzNzhqbFloVk56d2tCMFk3dHNzOG5HejVEaDF2eEpJ';
-
+// ===== CARGAR WEBHOOKS (sin bloquear el UI) =====
+initializeWebhooks().then(function(ready) {
+    if (ready) {
+        console.log('[Heimdall] ✅ Webhooks listos');
+    } else {
+        console.warn('[Heimdall] ⚠️ Webhooks no disponibles');
+        alert('⚠️ Heimdall: No se pudieron cargar los webhooks.\nAbre el Excel en SharePoint y recarga CAMP.\n\n' + EXCEL_DIRECT_URL);
+    }
+});
     // ===== UI: LEFT SIDEBAR PANEL =====
 
     const banner = document.createElement('div');
