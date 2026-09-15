@@ -528,6 +528,8 @@ initializeWebhooks().then(function(ready) {
 
     const PWD_AGENTS = [
         'angielkr',
+        'anasua',
+        'edupolow',
         'anartayl',
         'bgupaola',
         'dianmqui',
