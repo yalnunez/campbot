@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SDS Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.3
+// @version      0.9.3.4
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
@@ -34,6 +34,11 @@ var SHAREPOINT_SITE = 'amazon.sharepoint.com';
 var SHAREPOINT_SITE_PATH = '/sites/Yalnunez';
 var EXCEL_DIRECT_URL = 'https://amazon.sharepoint.com/:x:/r/sites/SDSColombia/_layouts/15/Doc.aspx?sourcedoc=%7B770FE60A-246F-4EA5-8773-62441D98795F%7D&file=Heimdall%20Webhook%20Config.xlsx&action=default&mobileredirect=true';
 var EXCEL_DOWNLOAD_URL = 'https://amazon.sharepoint.com/sites/SDSColombia/_api/web/GetFileByServerRelativeUrl(\'/sites/SDSColombia/Shared%20Documents/Heimdall%20Bot%20(Camp%20Bot)/Heimdall%20Webhook%20Config.xlsx\')/$value';
+var SP_GRAPH_PROXY = 'https://amazon.sharepoint.com/sites/SDSColombia/_api/v2.0';
+var SP_DRIVE_ID = '';
+var SP_ITEM_ID = '';
+var MOVEMENTS_TABLE_NAME = 'MovementsLog';
+var excelWriteReady = false;
 
 // ===== DYNAMIC WEBHOOK VARIABLES =====
 var MANAGERS_WEBHOOKS = {};
@@ -213,14 +218,32 @@ function loadWebhooksFromCache() {
 // ===== INICIALIZACIÓN =====
 function initializeWebhooks() {
     if (webhooksLoaded && (Date.now() - lastWebhookLoad) < WEBHOOK_CACHE_DURATION) {
+        if (!excelWriteReady) {
+            initExcelWriteIds().catch(function(e) {
+                console.warn('[Heimdall] ⚠️ Excel write no disponible:', e);
+            });
+        }
         return Promise.resolve(true);
     }
-    return loadWebhooksFromSharePoint().catch(function(error) {
-        console.warn('[Heimdall] ⚠️ Falló SharePoint (' + error + '). Intentando cache...');
-        if (loadWebhooksFromCache()) { return true; }
-        console.error('[Heimdall] ❌ No hay webhooks disponibles.');
-        return false;
-    });
+    return loadWebhooksFromSharePoint()
+        .then(function(result) {
+            // Webhooks cargados OK, intentar Excel write (sin afectar el resultado)
+            initExcelWriteIds().catch(function(e) {
+                console.warn('[Heimdall] ⚠️ Excel write no disponible:', e);
+            });
+            return result;
+        })
+        .catch(function(error) {
+            console.warn('[Heimdall] ⚠️ Falló SharePoint (' + error + '). Intentando cache...');
+            if (loadWebhooksFromCache()) {
+                initExcelWriteIds().catch(function(e) {
+                    console.warn('[Heimdall] ⚠️ Excel write no disponible:', e);
+                });
+                return Promise.resolve(true);
+            }
+            console.error('[Heimdall] ❌ No hay webhooks disponibles.');
+            return false;
+        });
 }
 
 function refreshWebhooks() {
@@ -228,12 +251,176 @@ function refreshWebhooks() {
     return initializeWebhooks();
 }
 
+function initExcelWriteIds() {
+    return new Promise(function(resolve, reject) {
+        if (excelWriteReady && SP_DRIVE_ID && SP_ITEM_ID) {
+            resolve(true);
+            return;
+        }
+        console.log('[Heimdall] 📊 Resolviendo IDs para escritura en Excel...');
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: SP_GRAPH_PROXY + '/sites/root/drive',
+            headers: { 'Accept': 'application/json' },
+            onload: function(response) {
+                try {
+                    if (response.status === 200) {
+                        var driveData = JSON.parse(response.responseText);
+                        SP_DRIVE_ID = driveData.id;
+                        console.log('[Heimdall] ✅ Drive ID: ' + SP_DRIVE_ID);
+                       var filePath = '/Heimdall Bot (Camp Bot)/Heimdall Webhook Config.xlsx';
+                        GM_xmlhttpRequest({
+                            method: 'GET',
+                            url: SP_GRAPH_PROXY + '/drives/' + SP_DRIVE_ID + '/root:' + encodeURI(filePath) + ':',
+                            headers: { 'Accept': 'application/json' },
+                            onload: function(resp2) {
+                                try {
+                                    if (resp2.status === 200) {
+                                        var fileData = JSON.parse(resp2.responseText);
+                                        SP_ITEM_ID = fileData.id;
+                                        excelWriteReady = true;
+                                        console.log('[Heimdall] ✅ Item ID: ' + SP_ITEM_ID);
+                                        GM_setValue('cached_SP_DRIVE_ID', SP_DRIVE_ID);
+                                        GM_setValue('cached_SP_ITEM_ID', SP_ITEM_ID);
+                                        resolve(true);
+                                    } else {
+                                        console.warn('[Heimdall] ⚠️ No se pudo resolver Item ID: HTTP ' + resp2.status);
+                                        loadExcelWriteIdsFromCache(resolve, reject);
+                                    }
+                                } catch (e) {
+                                    console.error('[Heimdall] ❌ Error parseando Item ID:', e);
+                                    loadExcelWriteIdsFromCache(resolve, reject);
+                                }
+                            },
+                            onerror: function() {
+                                console.error('[Heimdall] ❌ Error de red resolviendo Item ID');
+                                loadExcelWriteIdsFromCache(resolve, reject);
+                            }
+                        });
+                    } else {
+                        console.warn('[Heimdall] ⚠️ No se pudo obtener Drive ID: HTTP ' + response.status);
+                        loadExcelWriteIdsFromCache(resolve, reject);
+                    }
+                } catch (e) {
+                    console.error('[Heimdall] ❌ Error parseando Drive ID:', e);
+                    loadExcelWriteIdsFromCache(resolve, reject);
+                }
+            },
+            onerror: function() {
+                console.error('[Heimdall] ❌ Error de red obteniendo Drive ID');
+                loadExcelWriteIdsFromCache(resolve, reject);
+            }
+        });
+    });
+}
+
+function loadExcelWriteIdsFromCache(resolve, reject) {
+    SP_DRIVE_ID = GM_getValue('cached_SP_DRIVE_ID', '');
+    SP_ITEM_ID = GM_getValue('cached_SP_ITEM_ID', '');
+    if (SP_DRIVE_ID && SP_ITEM_ID) {
+        excelWriteReady = true;
+        console.log('[Heimdall] 📦 Excel Write IDs cargados desde cache');
+        resolve(true);
+    } else {
+        console.warn('[Heimdall] ⚠️ No hay Excel Write IDs en cache. Movements solo irán a Chime.');
+        reject('NO_EXCEL_WRITE_IDS');
+    }
+}
+
+function writeMovementToExcel(agentLogin, fromState, toState, action, team, duration) {
+    if (!webhooksLoaded) {
+        debugLog('⚠️ Webhooks not loaded, skipping movement log');
+        return;
+    }
+
+    var now = new Date();
+    var colombiaOffset = -5 * 60;
+    var localOffset = now.getTimezoneOffset();
+    var colombiaTime = new Date(now.getTime() + (localOffset + colombiaOffset) * 60000);
+
+    var dateStr = colombiaTime.getFullYear() + '-' +
+                  String(colombiaTime.getMonth() + 1).padStart(2, '0') + '-' +
+                  String(colombiaTime.getDate()).padStart(2, '0');
+
+    var hours = colombiaTime.getHours();
+    var ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    var timeStr = String(hours).padStart(2, '0') + ':' +
+                  String(colombiaTime.getMinutes()).padStart(2, '0') + ':' +
+                  String(colombiaTime.getSeconds()).padStart(2, '0') + ' ' + ampm;
+
+    var om = TM_TO_OM[(team || '').trim().toLowerCase()] || 'N/A';
+
+    // Paso 1: Obtener Request Digest del site personal
+    GM_xmlhttpRequest({
+        method: 'POST',
+        url: 'https://amazon.sharepoint.com/sites/Yalnunez/_api/contextinfo',
+        headers: {
+            'Accept': 'application/json;odata=verbose'
+        },
+        onload: function(digestResp) {
+            try {
+                if (digestResp.status !== 200) {
+                    console.error('[Heimdall] ❌ Failed to get digest: HTTP ' + digestResp.status);
+                    return;
+                }
+
+                var digestData = JSON.parse(digestResp.responseText);
+                var digest = digestData.d.GetContextWebInformation.FormDigestValue;
+
+                // Paso 2: Agregar item a la SharePoint List
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: "https://amazon.sharepoint.com/sites/Yalnunez/_api/web/lists/getbytitle('SDS_Heimdall_Movements_Log')/items",
+                    headers: {
+                        'Content-Type': 'application/json;odata=verbose',
+                        'Accept': 'application/json;odata=verbose',
+                        'X-RequestDigest': digest
+                    },
+                    data: JSON.stringify({
+                        '__metadata': { 'type': 'SP.Data.SDS_x005f_Heimdall_x005f_Movements_x005f_LogListItem' },
+                        'Title': dateStr,
+                        'Time': timeStr,
+                        'Agent': agentLogin,
+                        'Team': team || 'N/A',
+                        'OM': om,
+                        'From': fromState,
+                        'To': toState,
+                        'Duration': duration || 'N/A',
+                        'Action': action,
+                        'BotOperator': BOT_OPERATOR
+                    }),
+                    onload: function(response) {
+                        if (response.status >= 200 && response.status < 300) {
+                            debugLog('📊 SP List log: ' + agentLogin + ' ' + fromState + ' → ' + toState);
+                        } else if (response.status === 403) {
+                            console.warn('[Heimdall] ⚠️ SP List auth failed: HTTP 403');
+                            console.warn('[Heimdall] Response:', response.responseText ? response.responseText.substring(0, 500) : 'empty');
+                        } else {
+                            console.error('[Heimdall] ❌ SP List write HTTP ' + response.status, response.responseText ? response.responseText.substring(0, 500) : '');
+                        }
+                    },
+                    onerror: function() {
+                        console.error('[Heimdall] ❌ SP List write network error');
+                    }
+                });
+
+            } catch (e) {
+                console.error('[Heimdall] ❌ Error getting digest:', e);
+            }
+        },
+        onerror: function() {
+            console.error('[Heimdall] ❌ Digest request network error');
+        }
+    });
+}
+
 function getManagerWebhook(teamName) {
     var tm = teamName.trim().toLowerCase();
     var om = TM_TO_OM[tm];
     return om ? MANAGERS_WEBHOOKS[om] : null;
 }
-
 // ===== CARGAR WEBHOOKS (sin bloquear el UI) =====
 initializeWebhooks().then(function(ready) {
     if (ready) {
@@ -573,7 +760,7 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const EMAIL_EXTENDED_TMS = [
-        'yalnunez',
+        '1yalxasfasdaadnunez1',
         // Agregar o quitar TMs según sea necesario
     ];
     const EMAIL_EXTENDED_THRESHOLD = 1800; // 30:00 — Solo alerta, no desconecta
@@ -1346,7 +1533,7 @@ ${rows}`;
             addStatusMessage('\uD83D\uDEA8 CAMP Refresh Stopped detected!');
 
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
-            const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS['drvamzn'];
+            const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : LOG_WEBHOOK_URL;
 
             GM_xmlhttpRequest({
                 method: 'POST',
@@ -1826,7 +2013,7 @@ ${rows}` }),
         }
     }
 
-       // ===== MOVEMENTS WEBHOOK (Manual + Automatic) =====
+       // ===== MOVEMENTS WEBHOOK (Manual + Automatic) Exporta logs al Excel en el SharePoint =====
     function sendMovementLog(agentLogin, fromState, toState, action, team, duration) {
         const time = new Date().toLocaleTimeString();
         const table = `| Agent | Team | From | To | Duration | Action | Time |
@@ -1842,6 +2029,8 @@ ${table}` }),
             onload: (r) => { if (r.status >= 300) addStatusMessage(`\u{274C} Movement log HTTP ${r.status}`); },
             onerror: () => { addStatusMessage('\u{274C} Movement log failed'); }
         });
+// LÍNEA NUEVA — escribe en el Excel de SharePoint
+    writeMovementToExcel(agentLogin, fromState, toState, action, team, duration);
     }
 
 
@@ -1872,6 +2061,6 @@ ${table}` }),
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.3 Developed by yalnunez');
+    addStatusMessage('v0.9.3.4 Developed by yalnunez');
 
 })();
