@@ -1,7 +1,8 @@
+
 // ==UserScript==
-// @name         Stores Heimdall bot by yalnunez
+// @name         Stores VCSCOL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.3
+// @version      0.9.3.4
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
@@ -232,7 +233,79 @@ function getManagerWebhook(teamName) {
     var om = TM_TO_OM[tm];
     return om ? MANAGERS_WEBHOOKS[om] : null;
 }
+function writeMovementToExcel(agentLogin, fromState, toState, action, team, duration) {
+    if (!webhooksLoaded) {
+        debugLog('⚠️ Webhooks not loaded, skipping movement log');
+        return;
+    }
 
+    var now = new Date();
+    var colombiaOffset = -5 * 60;
+    var localOffset = now.getTimezoneOffset();
+    var colombiaTime = new Date(now.getTime() + (localOffset + colombiaOffset) * 60000);
+
+    var dateStr = colombiaTime.getFullYear() + '-' +
+                  String(colombiaTime.getMonth() + 1).padStart(2, '0') + '-' +
+                  String(colombiaTime.getDate()).padStart(2, '0');
+
+    var hours = colombiaTime.getHours();
+    var ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    var timeStr = String(hours).padStart(2, '0') + ':' +
+                  String(colombiaTime.getMinutes()).padStart(2, '0') + ':' +
+                  String(colombiaTime.getSeconds()).padStart(2, '0') + ' ' + ampm;
+
+    var om = TM_TO_OM[(team || '').trim().toLowerCase()] || 'N/A';
+
+    GM_xmlhttpRequest({
+        method: 'POST',
+        url: 'https://amazon.sharepoint.com/sites/Yalnunez/_api/contextinfo',
+        headers: { 'Accept': 'application/json;odata=verbose' },
+        onload: function(digestResp) {
+            try {
+                if (digestResp.status !== 200) {
+                    console.error('[Heimdall] ❌ Failed to get digest: HTTP ' + digestResp.status);
+                    return;
+                }
+                var digestData = JSON.parse(digestResp.responseText);
+                var digest = digestData.d.GetContextWebInformation.FormDigestValue;
+
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: "https://amazon.sharepoint.com/sites/Yalnunez/_api/web/lists/getbytitle('Stores_Heimdall_Movements_Log')/items",
+                    headers: {
+                        'Content-Type': 'application/json;odata=verbose',
+                        'Accept': 'application/json;odata=verbose',
+                        'X-RequestDigest': digest
+                    },
+                    data: JSON.stringify({
+                        '__metadata': { 'type': 'SP.Data.Stores_x005f_Heimdall_x005f_Movements_x005f_LogListItem' },
+                        'Title': dateStr,
+                        'Time': timeStr,
+                        'Agent': agentLogin,
+                        'Team': team || 'N/A',
+                        'OM': om,
+                        'From': fromState,
+                        'To': toState,
+                        'Duration': duration || 'N/A',
+                        'Action': action,
+                        'BotOperator': BOT_OPERATOR
+                    }),
+                    onload: function(response) {
+                        if (response.status >= 200 && response.status < 300) {
+                            debugLog('📊 SP List log: ' + agentLogin + ' ' + fromState + ' → ' + toState);
+                        } else {
+                            console.error('[Heimdall] ❌ SP List write HTTP ' + response.status, response.responseText ? response.responseText.substring(0, 500) : '');
+                        }
+                    },
+                    onerror: function() { console.error('[Heimdall] ❌ SP List write network error'); }
+                });
+            } catch (e) { console.error('[Heimdall] ❌ Error getting digest:', e); }
+        },
+        onerror: function() { console.error('[Heimdall] ❌ Digest request network error'); }
+    });
+}
 // ===== CARGAR WEBHOOKS (sin bloquear el UI) =====
 initializeWebhooks().then(function(ready) {
     if (ready) {
@@ -474,19 +547,19 @@ initializeWebhooks().then(function(ready) {
 
     const AUX_THRESHOLDS = {
         'Available': 10800,//3:00:00 — Alert only (no disconnect)
-        'Meeting': 7200,// 2:00:00 — Alert only (no disconnect)
-        'Training': 7200,// 2:00:00 — Alert only (no disconnect)
-        'Project': 7200,// 2:00:00 — Alert only (no disconnect)
+        'Meeting': 10800,// 3:00:00 — Alert only (no disconnect)
+        'Training': 10800,// 3:00:00 — Alert only (no disconnect)
+        'Project': 10800,// 3:00:00 — Alert only (no disconnect)
         'Missed': 60,// 0:01:00 — Disconnect to Offline (2+) or Available (<2)
-        'Email': 600,// 0:10:00 — Disconnect to Offline
-        'Break': 920,// 0:15:15 — Disconnect to Offline
-        'Break2': 920,// 0:15:15 — Disconnect to Offline
-        'Break3': 615,// 0:10:15 — Disconnect to Offline
+        'Email': 90,// 0:01:30 — Disconnect to Offline
+        'Break': 915,// 0:15:15 — Disconnect to Offline
+        'Break2': 915,// 0:15:15 — Disconnect to Offline
+        'Break3': 615,// 0:10:15 — Immediate disconnect (any duration)
         'Personal': 375,// 0:06:15 — Disconnect to Offline
         'Lunch': 3615,// 1:00:15 — Disconnect to Offline
         'System': 600,// 0:10:00 — Disconnect to Offline
-        'On Contact': 1200,// 0:20:00 — Alert only (no disconnect)
-        'UpcomingOffline': 300// 0:05:00 — Alert only (no disconnect)
+        'On Contact': 1800,// 0:30:00 — Alert only (no disconnect)
+        'UpcomingOffline': 60// 0:01:00 — Disconnect to Offline
     };
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           OPERATION HOURS — Auto-Disconnect Outside Hours    ║
@@ -528,8 +601,6 @@ initializeWebhooks().then(function(ready) {
 
     const PWD_AGENTS = [
         'angielkr',
-        'anasua',
-        'edupolow',
         'anartayl',
         'bgupaola',
         'dianmqui',
@@ -590,12 +661,21 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
       const NEW_HIRE_TMS = [
-        'perginna',
-        'adouglyg',
-        'storresg'
+        'camargis',
+        'claraaqu',
+        'cruizher',
+        'florezhi',
+        'gonzylau',
+        'jcaldani',
+        'llandine',
+        'luribesa',
+        'robayotl',
+        'sandreac',
+        'rdrkat',
+        'svilaura'
         // Agregar o quitar TMs según sea necesario
     ];
-    const NEW_HIRE_ON_CONTACT_THRESHOLD = 1800; // 30:00
+    const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           EMAIL EXTENDED TMs — No Disconnect on Email        ║
@@ -608,25 +688,6 @@ initializeWebhooks().then(function(ready) {
     const EMAIL_EXTENDED_TMS = [
         'brayandv',
         'elsbolan',
-        'acordead',
-        'anuarado',
-        'dabroche',
-        'dianapam',
-        'didiazva',
-        'fqvn',
-        'gsarmiec',
-        'gulaurac',
-        'ilauraca',
-        'josealso',
-        'juamartt',
-        'kelyrami',
-        'legnayoh',
-        'lopeglui',
-        'olarta',
-        'ranbello',
-        'rendonbe',
-        'rivediaj',
-        'ynicolca',
         'jonleoj',
         'jugarzo',
         'jumurcia',
@@ -646,7 +707,7 @@ initializeWebhooks().then(function(ready) {
     // ║  States NOT listed here are alert-only (no state change).   ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-    const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System'];
+    const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║     NO DISCONNECT AGENTS — Alert Only, No Auto-Offline      ║
@@ -1423,7 +1484,7 @@ ${rows}`;
             addStatusMessage('\uD83D\uDEA8 CAMP Refresh Stopped detected!');
 
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
-            const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MANAGERS_WEBHOOKS['drvamzn'];
+            const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : LOG_WEBHOOK_URL;
 
             GM_xmlhttpRequest({
                 method: 'POST',
@@ -1929,6 +1990,8 @@ ${table}` }),
             onload: (r) => { if (r.status >= 300) addStatusMessage(`\u{274C} Movement log HTTP ${r.status}`); },
             onerror: () => { addStatusMessage('\u{274C} Movement log failed'); }
         });
+        // LÍNEA NUEVA — escribe en la SharePoint List
+    writeMovementToExcel(agentLogin, fromState, toState, action, team, duration);
     }
 
 
@@ -1959,6 +2022,6 @@ ${table}` }),
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.2 Developed by yalnunez');
+    addStatusMessage('v0.9.3.4 Developed by yalnunez');
 
 })();
