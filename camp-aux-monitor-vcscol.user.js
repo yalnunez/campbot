@@ -686,7 +686,7 @@ initializeWebhooks().then(function(ready) {
         startMinute: 0,
         endHour: 23,// 23:00
         endMinute: 0,
-        graceMinutes: 5// 5 min gracia → activo de 00:55 a 23:05
+        graceMinutes: 10// 10 min gracia → activo de 00:50 a 23:10
     };
 
    function isOutsideOperationHours() {
