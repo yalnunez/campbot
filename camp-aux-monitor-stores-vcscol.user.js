@@ -686,7 +686,7 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const EMAIL_EXTENDED_TMS = [
-   'team elsbolan',
+'team elsbolan',
 'team jugarzo',
 'team jumurcia',
 'team lauracrc',
@@ -731,7 +731,15 @@ initializeWebhooks().then(function(ready) {
 'mosquchr',
 'chrixp',
 'fonjairo',
-'lunarva'
+'lunarva',
+'javdiazp',
+'catanolc',
+'sfrancn',
+'jenargue',
+'jeshin',
+'narancri',
+'jorgenll',
+'velasher'
         // Agregar o quitar TMs según sea necesario
     ];
     const EMAIL_EXTENDED_THRESHOLD = 900; // 15:00 — Solo alerta, no desconecta
