@@ -681,7 +681,7 @@ initializeWebhooks().then(function(ready) {
     // ║           EMAIL EXTENDED TMs — No Disconnect on Email        ║
     // ║  Para estos TMs, el estado Email NO desconecta al agente.   ║
     // ║  En su lugar, solo se notifica al OM cuando el agente       ║
-    // ║  supera los 30 minutos (1800s) en Email.                    ║
+    // ║  supera los 15 minutos (900) en Email.                    ║
     // ║  El bot lee la columna "Team" para determinar si aplica.    ║
     // ╚══════════════════════════════════════════════════════════════╝
 
@@ -734,7 +734,7 @@ initializeWebhooks().then(function(ready) {
 'lunarva'
         // Agregar o quitar TMs según sea necesario
     ];
-    const EMAIL_EXTENDED_THRESHOLD = 1200; // 20:00 — Solo alerta, no desconecta
+    const EMAIL_EXTENDED_THRESHOLD = 900; // 15:00 — Solo alerta, no desconecta
 
 
     // ╔══════════════════════════════════════════════════════════════╗
