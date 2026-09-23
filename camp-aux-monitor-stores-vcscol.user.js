@@ -670,6 +670,7 @@ initializeWebhooks().then(function(ready) {
 
     const ACCOMMODATION_AGENTS = [
         'kevcsti',
+        'ehernajo',
         'zssegura',
         'ylopezar'
         // Add more accommodation logins here
