@@ -649,15 +649,16 @@ initializeWebhooks().then(function(ready) {
 
         // 1. Check ACCOMMODATION first (custom per Break/Break2)
         if (ACCOMMODATION_AGENTS.includes(login)) {
-            if (state === 'Break') return ACCOMMODATION_BREAK1_THRESHOLD;// 10:15
+            if (state === 'Break') return ACCOMMODATION_BREAK1_THRESHOLD;// 30:15
             if (state === 'Break2') return ACCOMMODATION_BREAK2_THRESHOLD;// 30:15
+            if (state === 'Break3') return ACCOMMODATION_BREAK3_THRESHOLD;// 30:15
         }
 
         // 2. Check PWD (same extended threshold for both breaks)
         if (PWD_AGENTS.includes(login)) return PWD_BREAK_THRESHOLD; // 20:15
 
-        // 3. Default threshold
-        return AUX_THRESHOLDS.Break; // 15:15
+        // 3. Default threshold (respeta el umbral propio de cada estado)
+        return AUX_THRESHOLDS[state] !== undefined ? AUX_THRESHOLDS[state] : AUX_THRESHOLDS.Break;
     }
 
     // ╔══════════════════════════════════════════════════════════════╗
@@ -669,11 +670,13 @@ initializeWebhooks().then(function(ready) {
 
     const ACCOMMODATION_AGENTS = [
         'kevcsti',
+        'zssegura',
         'ylopezar'
         // Add more accommodation logins here
     ];
-    const ACCOMMODATION_BREAK1_THRESHOLD = 615;// 10:15
-    const ACCOMMODATION_BREAK2_THRESHOLD = 1815;// 30:15
+    const ACCOMMODATION_BREAK1_THRESHOLD = 1815;// 30:15
+    const ACCOMMODATION_BREAK2_THRESHOLD = 1815;// 35:15
+    const ACCOMMODATION_BREAK3_THRESHOLD = 1815;// 30:15
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           NEW HIRE AGENTS — Extended On Contact              ║
@@ -1692,7 +1695,7 @@ ${rows}`;
 
                 // ===== CHECK THRESHOLD VIOLATION (PWD/Accommodatios for Break/Break2, New Hires for On Contact) =====
                 let effectiveThreshold;
-                if (state === 'Break' || state === 'Break2') {
+                if (state === 'Break' || state === 'Break2' || state === 'Break3') {
                     effectiveThreshold = getBreakThreshold(agentName, state);
                 } else if (state === 'On Contact') {
                     // Verificar si el TM del agente está en la lista de new hires
