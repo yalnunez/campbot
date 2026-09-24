@@ -795,6 +795,8 @@ initializeWebhooks().then(function(ready) {
         'legnayoh',
         'rendonbe',
         'didiazva',
+        'jeshin',
+        'narancri',
         'fqvn'
         // Agregar o quitar TMs según sea necesario
     ];
