@@ -670,7 +670,6 @@ initializeWebhooks().then(function(ready) {
 
     const ACCOMMODATION_AGENTS = [
         'kevcsti',
-        'ehernajo',
         'zssegura',
         'ylopezar'
         // Add more accommodation logins here
@@ -769,7 +768,37 @@ initializeWebhooks().then(function(ready) {
     ];
     const EMAIL_EXTENDED_THRESHOLD = 900; // 15:00 — Solo alerta, no desconecta
 
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║   UPCOMING OFFLINE EXTENDED TMs — No Disconnect, Alert Only  ║
+    // ║  Para estos TMs, el estado UpcomingOffline NO desconecta.   ║
+    // ║  En su lugar, solo se notifica cuando el agente supera      ║
+    // ║  los 10 minutos (600s) en UpcomingOffline.                  ║
+    // ╚══════════════════════════════════════════════════════════════╝
 
+    const UPCOMING_OFFLINE_EXTENDED_TMS = [
+        'kelyrami',
+        'gulaurac',
+        'olarta',
+        'dabroche',
+        'anuarado',
+        'ilauraca',
+        'josealso',
+        'gsarmiec',
+        'rivediaj',
+        'dianapam',
+        'ranbello',
+        'juborjav',
+        'acordead',
+        'ynicolca',
+        'juamartt',
+        'lopeglui',
+        'legnayoh',
+        'rendonbe',
+        'didiazva',
+        'fqvn'
+        // Agregar o quitar TMs según sea necesario
+    ];
+    const UPCOMING_OFFLINE_EXTENDED_THRESHOLD = 600; // 10:00 — Solo alerta, no desconecta
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           AUTO-OFFLINE STATES                                ║
     // ║  States where the bot will automatically disconnect agents   ║
@@ -1694,16 +1723,17 @@ ${rows}`;
                     debugLog(`${agentName} Personal - Duration: ${durationText} (${duration}s) | Personal Time: ${personalTimeText} (${personalSeconds}s) | Using: ${effectiveDurationText}`);
                 }
 
-                // ===== CHECK THRESHOLD VIOLATION (PWD/Accommodatios for Break/Break2, New Hires for On Contact) =====
+                // ===== CHECK THRESHOLD VIOLATION (PWD/Accommodations for Break/Break2/Break3, New Hires for On Contact, Extended TMs for Email/UpcomingOffline) =====
                 let effectiveThreshold;
                 if (state === 'Break' || state === 'Break2' || state === 'Break3') {
+                    // Break/Break2/Break3: umbral custom según PWD o Accommodation
                     effectiveThreshold = getBreakThreshold(agentName, state);
                 } else if (state === 'On Contact') {
-                    // Verificar si el TM del agente está en la lista de new hires
+                    // On Contact: New Hires obtienen umbral extendido (60 min), resto el estándar (30 min)
                     const teamCheck = cells[idx.team].textContent.trim().toLowerCase();
                     effectiveThreshold = NEW_HIRE_TMS.includes(teamCheck) ? NEW_HIRE_ON_CONTACT_THRESHOLD : AUX_THRESHOLDS['On Contact'];
                 } else if (state === 'Email') {
-                    // Verificar si el TM del agente está en la lista de Email extendido
+                    // Email: TMs extendidos obtienen 30 min (solo alerta), resto 1:30 (desconecta)
                     const teamCheckEmail = cells[idx.team].textContent.trim().toLowerCase();
                     if (EMAIL_EXTENDED_TMS.includes(teamCheckEmail)) {
                         // TM en la lista: threshold de 30 min, solo alerta (no desconecta)
@@ -1712,38 +1742,60 @@ ${rows}`;
                         // TM normal: threshold estándar de 1:30, desconecta a Offline
                         effectiveThreshold = AUX_THRESHOLDS['Email'];
                     }
+                } else if (state === 'UpcomingOffline') {
+                    // UpcomingOffline: TMs extendidos obtienen 10 min (solo alerta), resto el estándar (desconecta)
+                    const teamCheckUpcoming = cells[idx.team].textContent.trim().toLowerCase();
+                    if (UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcoming)) {
+                        // TM en la lista: threshold de 10 min, solo alerta (no desconecta)
+                        effectiveThreshold = UPCOMING_OFFLINE_EXTENDED_THRESHOLD;
+                    } else {
+                        // TM normal: threshold estándar, desconecta a Offline
+                        effectiveThreshold = AUX_THRESHOLDS['UpcomingOffline'];
+                    }
                 } else {
+                    // Cualquier otro estado: usa el umbral estándar definido en AUX_THRESHOLDS
                     effectiveThreshold = AUX_THRESHOLDS[state];
                 }
+
+                // ===== SI EXCEDE EL UMBRAL, DETERMINAR ACCIÓN =====
                 if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) {
-                    // Para Email: si el TM está en EMAIL_EXTENDED_TMS, NO desconectar (solo alertar)
+                    // Por defecto, desconecta si el estado está en AUTO_OFFLINE_STATES
                     let shouldAutoOffline = AUTO_OFFLINE_STATES.includes(state);
 
-                    // Check NO_DISCONNECT_AGENTS — never auto-offline, only alert
+                    // Check NO_DISCONNECT_AGENTS — nunca auto-offline, solo alerta
                     const loginCheckDisconnect = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
                     if (NO_DISCONNECT_AGENTS.includes(loginCheckDisconnect)) {
                         shouldAutoOffline = false;
                     }
 
-                    // Check EMAIL_EXTENDED_TMS — no auto-offline for Email state
+                    // Check EMAIL_EXTENDED_TMS — no auto-offline para estado Email
                     if (state === 'Email') {
                         const teamCheckOffline = cells[idx.team].textContent.trim().toLowerCase();
                         if (EMAIL_EXTENDED_TMS.includes(teamCheckOffline)) {
-                            shouldAutoOffline = false;
+                            shouldAutoOffline = false; // Solo alerta, no desconecta
                         }
                     }
 
+                    // Check UPCOMING_OFFLINE_EXTENDED_TMS — no auto-offline para estado UpcomingOffline
+                    if (state === 'UpcomingOffline') {
+                        const teamCheckUpcomingOffline = cells[idx.team].textContent.trim().toLowerCase();
+                        if (UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcomingOffline)) {
+                            shouldAutoOffline = false; // Solo alerta, no desconecta
+                        }
+                    }
 
-
+                    // Registrar violación de On Contact para lógica de alertas alternantes
                     if (state === 'On Contact') {
                         currentOnContactViolations.add(agentName);
                     }
 
+                    // Leer el número de Missed Contacts si la columna existe
                     let missedContactsValue = 0;
                     if (idx.missedContacts !== -1) {
                         missedContactsValue = parseInt(cells[idx.missedContacts].textContent.trim()) || 0;
                     }
 
+                    // Agregar la alerta a la lista general
                     allAlerts.push({
                         agent: agentName, team: cells[idx.team].textContent.trim(),
                         state, profile: cells[idx.profile].textContent.trim(),
@@ -1752,6 +1804,7 @@ ${rows}`;
                         missedContacts: missedContactsValue
                     });
 
+                    // Si debe desconectarse, agregarlo a la cola de cambios de estado
                     if (shouldAutoOffline) {
                         stateChangeQueue.push({
                             agentName, state, duration: effectiveDurationText,
@@ -1763,7 +1816,6 @@ ${rows}`;
                 }
             }
         });
-
         // ===== AUTOCLICK PROCESSING =====
 
         if (stateChangeQueue.length > 0 && autoClickEnabled) {
