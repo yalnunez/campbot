@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         SDS Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.4
+// @version      0.9.3.6
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
-// @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh
+// @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh / remote deactivation
 // @author       @yalnunez
 // @match        https://prod-iad.camp.wwcs.amazon.dev/*
 // @match        https://prod-fra.camp.wwcs.amazon.dev/*
@@ -39,6 +39,9 @@ var SP_DRIVE_ID = '';
 var SP_ITEM_ID = '';
 var MOVEMENTS_TABLE_NAME = 'MovementsLog';
 var excelWriteReady = false;
+var BOT_VERTICAL = 'SDS'; // ← En el bot de SDS, cambiar esta línea a 'SDS'
+var BOT_STATUS_LIST = 'Heimdall_Bot_Status';
+var SP_YALNUNEZ = 'https://amazon.sharepoint.com/sites/Yalnunez';
 
 // ===== DYNAMIC WEBHOOK VARIABLES =====
 var MANAGERS_WEBHOOKS = {};
@@ -327,6 +330,11 @@ function loadExcelWriteIdsFromCache(resolve, reject) {
     }
 }
 
+// ===== CONFIG DE SESIÓN (Tracking en SharePoint List) =====
+var BOT_VERTICAL = 'SDS'; // ← En el bot de Stores, cambiar esta línea a 'Stores'
+var BOT_SESSIONS_LIST = 'Stores_Heimdall_Bot_Sessions'; // Lista compartida para ambas verticales
+var SP_YALNUNEZ = 'https://amazon.sharepoint.com/sites/Yalnunez';
+
 function writeMovementToExcel(agentLogin, fromState, toState, action, team, duration) {
     if (!webhooksLoaded) {
         debugLog('⚠️ Webhooks not loaded, skipping movement log');
@@ -416,6 +424,124 @@ function writeMovementToExcel(agentLogin, fromState, toState, action, team, dura
     });
 }
 
+// ===== HEARTBEAT DE ESTADO (una fila por operador, se actualiza) =====
+function writeHeartbeat(status) {
+    GM_xmlhttpRequest({
+        method: 'POST',
+        url: SP_YALNUNEZ + '/_api/contextinfo',
+        headers: { 'Accept': 'application/json;odata=verbose' },
+        onload: function(digestResp) {
+            try {
+                if (digestResp.status !== 200) {
+                    console.error('[Heimdall] ❌ Heartbeat digest HTTP ' + digestResp.status);
+                    return;
+                }
+                var digest = JSON.parse(digestResp.responseText).d.GetContextWebInformation.FormDigestValue;
+
+                // Timestamp en hora Colombia (UTC-5)
+                var now = new Date();
+                var colTime = new Date(now.getTime() + (now.getTimezoneOffset() - 300) * 60000);
+                var ts = colTime.getFullYear() + '-' +
+                         String(colTime.getMonth() + 1).padStart(2, '0') + '-' +
+                         String(colTime.getDate()).padStart(2, '0') + ' ' +
+                         colTime.toLocaleTimeString('en-US', { hour12: true });
+
+                var me = BOT_OPERATOR.trim().toLowerCase();
+
+                // Paso 1: Buscar si ya existe la fila de este operador
+                var findUrl = SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST +
+                              "')/items?$select=Id,Title&$filter=Title eq '" + me + "'&$top=1";
+
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: findUrl,
+                    headers: { 'Accept': 'application/json;odata=verbose' },
+                    onload: function(findResp) {
+                        var existingId = null;
+                        try {
+                            if (findResp.status === 200) {
+                                var results = JSON.parse(findResp.responseText).d.results;
+                                if (results && results.length > 0) existingId = results[0].Id;
+                            }
+                        } catch (e) {}
+
+                        var payload = JSON.stringify({
+                            '__metadata': { 'type': 'SP.Data.Heimdall_x005f_Bot_x005f_StatusListItem' },
+                            'Title': BOT_OPERATOR,
+                            'Status': status,
+                            'LastSeen': ts,
+                            'Vertical': BOT_VERTICAL
+                        });
+
+                        if (existingId) {
+                            // Ya existe → ACTUALIZAR esa fila (MERGE)
+                            GM_xmlhttpRequest({
+                                method: 'POST',
+                                url: SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST + "')/items(" + existingId + ")",
+                                headers: {
+                                    'Content-Type': 'application/json;odata=verbose',
+                                    'Accept': 'application/json;odata=verbose',
+                                    'X-RequestDigest': digest,
+                                    'X-HTTP-Method': 'MERGE',
+                                    'IF-MATCH': '*'
+                                },
+                                data: payload,
+                                onload: function(r) {
+                                    if (r.status >= 200 && r.status < 300) debugLog('💓 Heartbeat MERGE: ' + status + ' (' + BOT_VERTICAL + ')');
+                                    else console.error('[Heimdall] ❌ Heartbeat MERGE HTTP ' + r.status);
+                                },
+                                onerror: function() { console.error('[Heimdall] ❌ Heartbeat MERGE network error'); }
+                            });
+                        } else {
+                            // No existe → CREAR fila nueva
+                            GM_xmlhttpRequest({
+                                method: 'POST',
+                                url: SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST + "')/items",
+                                headers: {
+                                    'Content-Type': 'application/json;odata=verbose',
+                                    'Accept': 'application/json;odata=verbose',
+                                    'X-RequestDigest': digest
+                                },
+                                data: payload,
+                                onload: function(r) {
+                                    if (r.status >= 200 && r.status < 300) debugLog('💓 Heartbeat CREATE: ' + status + ' (' + BOT_VERTICAL + ')');
+                                    else console.error('[Heimdall] ❌ Heartbeat CREATE HTTP ' + r.status, r.responseText ? r.responseText.substring(0, 300) : '');
+                                },
+                                onerror: function() { console.error('[Heimdall] ❌ Heartbeat CREATE network error'); }
+                            });
+                        }
+                    },
+                    onerror: function() { console.error('[Heimdall] ❌ Heartbeat find network error'); }
+                });
+            } catch (e) { console.error('[Heimdall] ❌ Heartbeat error:', e); }
+        },
+        onerror: function() { console.error('[Heimdall] ❌ Heartbeat digest network error'); }
+    });
+}
+// ===== LEER KILL SWITCH (Status del operador en la lista) =====
+function checkRemoteStatus(callback) {
+    var me = BOT_OPERATOR.trim().toLowerCase();
+    var url = SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST +
+              "')/items?$select=Id,Title,Status&$filter=Title eq '" + me + "'&$top=1";
+    GM_xmlhttpRequest({
+        method: 'GET',
+        url: url,
+        headers: { 'Accept': 'application/json;odata=verbose' },
+        onload: function(r) {
+            try {
+                if (r.status !== 200) { callback('ON'); return; } // si falla, no apagar
+                var results = JSON.parse(r.responseText).d.results;
+                if (results && results.length > 0) {
+                    var status = (results[0].Status || 'ON').toString().trim().toUpperCase();
+                    callback(status);
+                } else {
+                    callback('ON'); // sin fila = no apagar
+                }
+            } catch(e) { callback('ON'); }
+        },
+        onerror: function() { callback('ON'); } // si falla la red, no apagar
+    });
+}
 function getManagerWebhook(teamName) {
     var tm = teamName.trim().toLowerCase();
     var om = TM_TO_OM[tm];
@@ -681,6 +807,10 @@ initializeWebhooks().then(function(ready) {
     // ║           OPERATION HOURS — Auto-Disconnect Outside Hours    ║
     // ╚══════════════════════════════════════════════════════════════╝
 
+  // ╔══════════════════════════════════════════════════════════════╗
+    // ║           OPERATION HOURS — Auto-Disconnect Outside Hours    ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
     const OPERATION_HOURS = {
         startHour: 1,// 01:00
         startMinute: 0,
@@ -716,16 +846,93 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const PWD_AGENTS = [
-        'roalvarz',
-        'duqqcarl'
+        'admartiq',
+        'adriwcha',
+        'anartayl',
+        'anasua',
+        'angielkr',
+        'atrejost',
+        'bgupaola',
+        'caranazl',
+        'dezsilva',
+        'dianmqui',
+        'diarizap',
+        'duqqcarl',
+        'edgmerca',
+        'edupolow',
+        'eribetha',
+        'galaanga',
+        'hpasamue',
+        'jarabnad',
+        'johanysa',
+        'juaegome',
+        'juradobm',
+        'kristiqc',
+        'libadrui',
+        'lvivicov',
+        'lyoperdo',
+        'margeebr',
+        'maribcud',
+        'mauresme',
+        'mazohert',
+        'mkarisan',
+        'navasfrg',
+        'obrecarv',
+        'paulaasi',
+        'qrodenin',
+        'qtrandre',
+        'rmerceds',
+        'rortizri',
+        'suariqma',
+        'tarijudi',
+        'roalvarz'
         // Add more PWD logins here
     ];
     const PWD_BREAK_THRESHOLD = 1215; // 20:15
 
-    function getBreakThreshold(agentName) {
+
+    function getBreakThreshold(agentName, state) {
         const login = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
-        return PWD_AGENTS.includes(login) ? PWD_BREAK_THRESHOLD : AUX_THRESHOLDS.Break;
+
+        // 1. Check ACCOMMODATION first (custom per Break/Break2)
+        if (ACCOMMODATION_AGENTS.includes(login)) {
+            if (state === 'Break') return ACCOMMODATION_BREAK1_THRESHOLD;// 30:15
+            if (state === 'Break2') return ACCOMMODATION_BREAK2_THRESHOLD;// 30:15
+            if (state === 'Break3') return ACCOMMODATION_BREAK3_THRESHOLD;// 30:15
+        }
+
+        // 2. Check PWD (same extended threshold for both breaks)
+        if (PWD_AGENTS.includes(login)) return PWD_BREAK_THRESHOLD; // 20:15
+
+        // 3. Default threshold (respeta el umbral propio de cada estado)
+        return AUX_THRESHOLDS[state] !== undefined ? AUX_THRESHOLDS[state] : AUX_THRESHOLDS.Break;
     }
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║     ACCOMMODATION AGENTS — Custom Break Thresholds          ║
+    // ║  These agents have special accommodation:                   ║
+    // ║  Break1 = 10:15 (615s) instead of 15:15 (915s)             ║
+    // ║  Break2 = 30:15 (1815s) instead of 15:15 (915s)            ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
+    const ACCOMMODATION_AGENTS = [
+        'kevcsti',
+        'zssegura',
+        'ylopezar',
+        'jcqumor',
+        'ninoserf',
+        'danromeg',
+        'pccastib',
+        'luurrea',
+        'rortizri',
+        'foreroqu',
+        'hpasamue'
+        // Add more accommodation logins here
+    ];
+    const ACCOMMODATION_BREAK1_THRESHOLD = 2115;// 35:15
+    const ACCOMMODATION_BREAK2_THRESHOLD = 1815;// 30:15
+    const ACCOMMODATION_BREAK3_THRESHOLD = 2115;// 35:15
+    const ACCOMMODATION_PERSONAL_THRESHOLD = 2175;// 36:15
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           NEW HIRE AGENTS — Extended On Contact              ║
@@ -743,7 +950,6 @@ initializeWebhooks().then(function(ready) {
         'llandine',
         'luribesa',
         'robayotl',
-        'admatall',
         'sandreac',
         'rdrkat',
         'svilaura'
@@ -755,17 +961,100 @@ initializeWebhooks().then(function(ready) {
     // ║           EMAIL EXTENDED TMs — No Disconnect on Email        ║
     // ║  Para estos TMs, el estado Email NO desconecta al agente.   ║
     // ║  En su lugar, solo se notifica al OM cuando el agente       ║
-    // ║  supera los 30 minutos (1800s) en Email.                    ║
+    // ║  supera los 15 minutos (900) en Email.                    ║
     // ║  El bot lee la columna "Team" para determinar si aplica.    ║
     // ╚══════════════════════════════════════════════════════════════╝
 
     const EMAIL_EXTENDED_TMS = [
-        '1yalxasfasdaadnunez1',
+'team elsbolan',
+'team jugarzo',
+'team jumurcia',
+'team lauracrc',
+'team leipaula',
+'team romecin',
+'team valgarzo',
+'team brayandv',
+'kelyrami',
+'gulaurac',
+'olarta',
+'dabroche',
+'anuarado',
+'ilauraca',
+'josealso',
+'gsarmiec',
+'rivediaj',
+'dianapam',
+'ranbello',
+'juborjav',
+'acordead',
+'ynicolca',
+'juamartt',
+'lopeglui',
+'legnayoh',
+'rendonbe',
+'didiazva',
+'fqvn',
+'jonleoj',
+'cxfriasa',
+'araujh',
+'sebasus',
+'storresg',
+'aradan',
+'jdiazhur',
+'scstano',
+'jorgmune',
+'alopzg',
+'ramariaj',
+'perginna',
+'adouglyg',
+'glafonso',
+'mosquchr',
+'chrixp',
+'fonjairo',
+'lunarva',
+'javdiazp',
+'catanolc',
+'sfrancn',
+'jenargue',
+'jeshin',
+'narancri',
+'jorgenll',
+'velasher'
         // Agregar o quitar TMs según sea necesario
     ];
-    const EMAIL_EXTENDED_THRESHOLD = 1800; // 30:00 — Solo alerta, no desconecta
+    const EMAIL_EXTENDED_THRESHOLD = 900; // 15:00 — Solo alerta, no desconecta
 
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║   UPCOMING OFFLINE EXTENDED TMs — No Disconnect, Alert Only  ║
+    // ║  Para estos TMs, el estado UpcomingOffline NO desconecta.   ║
+    // ║  En su lugar, solo se notifica cuando el agente supera      ║
+    // ║  los 10 minutos (600s) en UpcomingOffline.                  ║
+    // ╚══════════════════════════════════════════════════════════════╝
 
+    const UPCOMING_OFFLINE_EXTENDED_TMS = [
+        'kelyrami',
+        'gulaurac',
+        'olarta',
+        'dabroche',
+        'anuarado',
+        'ilauraca',
+        'josealso',
+        'gsarmiec',
+        'rivediaj',
+        'dianapam',
+        'ranbello',
+        'juborjav',
+        'acordead',
+        'ynicolca',
+        'juamartt',
+        'lopeglui',
+        'legnayoh',
+        'rendonbe',
+        'didiazva',
+        'fqvn'
+        // Agregar o quitar TMs según sea necesario
+    ];
+    const UPCOMING_OFFLINE_EXTENDED_THRESHOLD = 600; // 10:00 — Solo alerta, no desconecta
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           AUTO-OFFLINE STATES                                ║
     // ║  States where the bot will automatically disconnect agents   ║
@@ -776,10 +1065,28 @@ initializeWebhooks().then(function(ready) {
     const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
 
     // ╔══════════════════════════════════════════════════════════════╗
+    // ║     NO DISCONNECT AGENTS — Alert Only, No Auto-Offline      ║
+    // ║  These agents will NOT be moved to Offline automatically    ║
+    // ║  in any AUTO_OFFLINE_STATE. The bot will only send the      ║
+    // ║  alert to the OM when the threshold is exceeded.            ║
+    // ╚══════════════════════════════════════════════════════════════╝
+
+    const NO_DISCONNECT_AGENTS = [
+        'calvotga',
+        'kevcsti',
+        'solacind',
+        'ylopezar',
+        'zssegura'
+        // Add more logins here as needed
+    ];
+
+
+    // ╔══════════════════════════════════════════════════════════════╗
     // ║           SESSION VARIABLES                                  ║
     // ╚══════════════════════════════════════════════════════════════╝
 
     let isMonitoring = false;
+    let cycleCount = 0;
     let monitoringTimeout = null;
     let disconnectionLog = [];
 
@@ -1462,8 +1769,30 @@ ${rows}`;
 
     // ===== MAIN MONITORING CYCLE =====
 
-    async function monitoringCycle() {
+       async function monitoringCycle() {
         if (!isMonitoring) return;
+
+        // ===== KILL SWITCH: revisar desde el ciclo 5 en adelante =====
+        cycleCount++;
+        if (cycleCount < 5) {
+            // Primeros 4 ciclos: escribir ON para "reclamar" el estado, sin revisar kill switch
+            writeHeartbeat('ON');
+        } else {
+            // Ciclo 5+: revisar el Status remoto
+            var remoteStatus = await new Promise(function(resolve) {
+                checkRemoteStatus(function(status) { resolve(status); });
+            });
+            if (remoteStatus === 'OFF') {
+                addStatusMessage('🛑 Bot pausado remotamente desde el dashboard.');
+                isMonitoring = false;
+                if (monitoringTimeout) { clearTimeout(monitoringTimeout); monitoringTimeout = null; }
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                return;
+            }
+            // Sigue activo → actualizar LastSeen
+            writeHeartbeat('ON');
+        }
 
         const sessionOk = await checkAndResumeSession();
         if (!sessionOk) {
@@ -1673,16 +2002,25 @@ ${rows}`;
                     debugLog(`${agentName} Personal - Duration: ${durationText} (${duration}s) | Personal Time: ${personalTimeText} (${personalSeconds}s) | Using: ${effectiveDurationText}`);
                 }
 
-                // ===== CHECK THRESHOLD VIOLATION (PWD for Break/Break2, New Hires for On Contact) =====
+                // ===== CHECK THRESHOLD VIOLATION (PWD/Accommodations for Break/Break2/Break3, New Hires for On Contact, Extended TMs for Email/UpcomingOffline) =====
                 let effectiveThreshold;
-                if (state === 'Break' || state === 'Break2') {
-                    effectiveThreshold = getBreakThreshold(agentName);
+                if (state === 'Break' || state === 'Break2' || state === 'Break3') {
+                    // Break/Break2/Break3: umbral custom según PWD o Accommodation
+                    effectiveThreshold = getBreakThreshold(agentName, state);
+                    } else if (state === 'Personal') {
+                    // Accommodation agents obtienen 36 min en Personal, resto el estándar (6:15)
+                    const loginCheckPersonal = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
+                    if (ACCOMMODATION_AGENTS.includes(loginCheckPersonal)) {
+                        effectiveThreshold = ACCOMMODATION_PERSONAL_THRESHOLD;// 36:00
+                    } else {
+                        effectiveThreshold = AUX_THRESHOLDS['Personal'];// 6:15
+                    }
                 } else if (state === 'On Contact') {
-                    // Verificar si el TM del agente está en la lista de new hires
+                    // On Contact: New Hires obtienen umbral extendido (60 min), resto el estándar (30 min)
                     const teamCheck = cells[idx.team].textContent.trim().toLowerCase();
                     effectiveThreshold = NEW_HIRE_TMS.includes(teamCheck) ? NEW_HIRE_ON_CONTACT_THRESHOLD : AUX_THRESHOLDS['On Contact'];
                 } else if (state === 'Email') {
-                    // Verificar si el TM del agente está en la lista de Email extendido
+                    // Email: TMs extendidos obtienen 30 min (solo alerta), resto 1:30 (desconecta)
                     const teamCheckEmail = cells[idx.team].textContent.trim().toLowerCase();
                     if (EMAIL_EXTENDED_TMS.includes(teamCheckEmail)) {
                         // TM en la lista: threshold de 30 min, solo alerta (no desconecta)
@@ -1691,12 +2029,33 @@ ${rows}`;
                         // TM normal: threshold estándar de 1:30, desconecta a Offline
                         effectiveThreshold = AUX_THRESHOLDS['Email'];
                     }
+                } else if (state === 'UpcomingOffline') {
+                    // UpcomingOffline: TMs extendidos obtienen 10 min (solo alerta), resto el estándar (desconecta)
+                    const teamCheckUpcoming = cells[idx.team].textContent.trim().toLowerCase();
+                    if (UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcoming)) {
+                        // TM en la lista: threshold de 10 min, solo alerta (no desconecta)
+                        effectiveThreshold = UPCOMING_OFFLINE_EXTENDED_THRESHOLD;
+                    } else {
+                        // TM normal: threshold estándar, desconecta a Offline
+                        effectiveThreshold = AUX_THRESHOLDS['UpcomingOffline'];
+                    }
                 } else {
+                    // Cualquier otro estado: usa el umbral estándar definido en AUX_THRESHOLDS
                     effectiveThreshold = AUX_THRESHOLDS[state];
                 }
+
+                // ===== SI EXCEDE EL UMBRAL, DETERMINAR ACCIÓN =====
                 if (effectiveThreshold !== undefined && effectiveDuration > effectiveThreshold) {
-                    // Para Email: si el TM está en EMAIL_EXTENDED_TMS, NO desconectar (solo alertar)
+                    // Por defecto, desconecta si el estado está en AUTO_OFFLINE_STATES
                     let shouldAutoOffline = AUTO_OFFLINE_STATES.includes(state);
+
+                    // Check NO_DISCONNECT_AGENTS — nunca auto-offline, solo alerta
+                    const loginCheckDisconnect = agentName.replace(/@amazon.*$/i, '').trim().toLowerCase();
+                    if (NO_DISCONNECT_AGENTS.includes(loginCheckDisconnect)) {
+                        shouldAutoOffline = false;
+                    }
+
+                    // Check EMAIL_EXTENDED_TMS — no auto-offline para estado Email
                     if (state === 'Email') {
                         const teamCheckOffline = cells[idx.team].textContent.trim().toLowerCase();
                         if (EMAIL_EXTENDED_TMS.includes(teamCheckOffline)) {
@@ -1704,15 +2063,26 @@ ${rows}`;
                         }
                     }
 
+                    // Check UPCOMING_OFFLINE_EXTENDED_TMS — no auto-offline para estado UpcomingOffline
+                    if (state === 'UpcomingOffline') {
+                        const teamCheckUpcomingOffline = cells[idx.team].textContent.trim().toLowerCase();
+                        if (UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcomingOffline)) {
+                            shouldAutoOffline = false; // Solo alerta, no desconecta
+                        }
+                    }
+
+                    // Registrar violación de On Contact para lógica de alertas alternantes
                     if (state === 'On Contact') {
                         currentOnContactViolations.add(agentName);
                     }
 
+                    // Leer el número de Missed Contacts si la columna existe
                     let missedContactsValue = 0;
                     if (idx.missedContacts !== -1) {
                         missedContactsValue = parseInt(cells[idx.missedContacts].textContent.trim()) || 0;
                     }
 
+                    // Agregar la alerta a la lista general
                     allAlerts.push({
                         agent: agentName, team: cells[idx.team].textContent.trim(),
                         state, profile: cells[idx.profile].textContent.trim(),
@@ -1721,6 +2091,7 @@ ${rows}`;
                         missedContacts: missedContactsValue
                     });
 
+                    // Si debe desconectarse, agregarlo a la cola de cambios de estado
                     if (shouldAutoOffline) {
                         stateChangeQueue.push({
                             agentName, state, duration: effectiveDurationText,
@@ -1732,7 +2103,6 @@ ${rows}`;
                 }
             }
         });
-
         // ===== AUTOCLICK PROCESSING =====
 
         if (stateChangeQueue.length > 0 && autoClickEnabled) {
@@ -2013,7 +2383,7 @@ ${rows}` }),
         }
     }
 
-       // ===== MOVEMENTS WEBHOOK (Manual + Automatic) Exporta logs al Excel en el SharePoint =====
+       // ===== MOVEMENTS WEBHOOK (Manual + Automatic) =====
     function sendMovementLog(agentLogin, fromState, toState, action, team, duration) {
         const time = new Date().toLocaleTimeString();
         const table = `| Agent | Team | From | To | Duration | Action | Time |
@@ -2029,7 +2399,7 @@ ${table}` }),
             onload: (r) => { if (r.status >= 300) addStatusMessage(`\u{274C} Movement log HTTP ${r.status}`); },
             onerror: () => { addStatusMessage('\u{274C} Movement log failed'); }
         });
-// LÍNEA NUEVA — escribe en el Excel de SharePoint
+        // LÍNEA NUEVA — escribe en la SharePoint List
     writeMovementToExcel(agentLogin, fromState, toState, action, team, duration);
     }
 
@@ -2041,8 +2411,10 @@ ${table}` }),
             isMonitoring = true;
             sessionCounters = { totalDisconnected: 0, totalMovedToAvailable: 0, totalFailed: 0, totalManagerAlerts: 0, totalTeamAlerts: 0 };
             disconnectionLog = [];
+            cycleCount = 0;
             previousOnContactAlerted = new Set();
             addStatusMessage('\u{25B6}\u{FE0F} Monitoring started');
+            writeHeartbeat('ON');
             monitoringCycle();
             startBtn.disabled = true;
             pauseBtn.disabled = false;
@@ -2055,12 +2427,13 @@ ${table}` }),
             if (monitoringTimeout) { clearTimeout(monitoringTimeout); monitoringTimeout = null; }
             addStatusMessage('\u{23F8}\u{FE0F} Monitoring paused');
             sendLogToWebhook();
+            writeHeartbeat('OFF');
             startBtn.disabled = false;
             pauseBtn.disabled = true;
         }
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.4 Developed by yalnunez');
+    addStatusMessage('v0.9.3.6 Developed by yalnunez');
 
 })();
