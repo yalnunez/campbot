@@ -850,7 +850,7 @@ initializeWebhooks().then(function(ready) {
 'team romecin',
 'team valgarzo',
 'team brayandv',
-'team kelyrami',
+'team kellyrami',
 'team gulaurac',
 'team olarta',
 'dabroche',
@@ -909,7 +909,7 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const UPCOMING_OFFLINE_EXTENDED_TMS = [
-        'team kelyrami',
+        'team kellyrami',
         'team gulaurac',
         'team olarta',
         'dabroche',
