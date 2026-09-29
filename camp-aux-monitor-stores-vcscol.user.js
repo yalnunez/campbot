@@ -895,6 +895,7 @@ initializeWebhooks().then(function(ready) {
 'jenargue',
 'jeshin',
 'narancri',
+'ES DART',
 'jorgenll',
 'gsamierc',
 'velasher'
@@ -932,6 +933,7 @@ initializeWebhooks().then(function(ready) {
         'didiazva',
         'jeshin',
         'narancri',
+        'ES DART',
         'fqvn'
         // Agregar o quitar TMs según sea necesario
     ];
