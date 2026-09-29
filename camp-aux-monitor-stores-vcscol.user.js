@@ -959,6 +959,20 @@ initializeWebhooks().then(function(ready) {
         'kevcsti',
         'solacind',
         'ylopezar',
+        'urenseba', 
+        'offek', 
+        'jaenc', 
+        'castcata', 
+        'migulate', 
+        'sjimener', 
+        'alfresa', 
+        'saljus', 
+        'gabrsanu', 
+        'durakimb', 
+        'hidjenni', 
+        'ssanchea', 
+        'rdmich', 
+        'wendolc',
         'zssegura'
         // Add more logins here as needed
     ];
