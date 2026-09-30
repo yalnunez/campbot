@@ -951,6 +951,8 @@ initializeWebhooks().then(function(ready) {
         'luribesa',
         'robayotl',
         'sandreac',
+        'saaimara',
+        'augucasx',
         'rdrkat',
         'svilaura'
         // Agregar o quitar TMs según sea necesario
