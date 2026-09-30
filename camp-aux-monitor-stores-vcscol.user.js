@@ -761,6 +761,7 @@ initializeWebhooks().then(function(ready) {
         'rortizri',
         'suariqma',
         'tarijudi',
+        'aldasarm',
         'roalvarz'
         // Add more PWD logins here
     ];
@@ -802,6 +803,7 @@ initializeWebhooks().then(function(ready) {
         'luurrea',
         'rortizri',
         'foreroqu',
+        'camiloal',
         'hpasamue'
         // Add more accommodation logins here
     ];
@@ -897,6 +899,9 @@ initializeWebhooks().then(function(ready) {
 'narancri',
 'ES DART',
 'jorgenll',
+'alvazlu',
+'dirubio',
+'isblanco,
 'gsamierc',
 'velasher'
         // Agregar o quitar TMs según sea necesario
@@ -933,6 +938,9 @@ initializeWebhooks().then(function(ready) {
         'didiazva',
         'jeshin',
         'narancri',
+        'alvazlu',
+        'dirubio',
+        'isblanco,
         'ES DART',
         'fqvn'
         // Agregar o quitar TMs según sea necesario
