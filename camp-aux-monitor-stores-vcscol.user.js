@@ -694,7 +694,7 @@ initializeWebhooks().then(function(ready) {
         'Meeting': 10800,// 3:00:00 — Alert only (no disconnect)
         'Training': 10800,// 3:00:00 — Alert only (no disconnect)
         'Project': 10800,// 3:00:00 — Alert only (no disconnect)
-        'Missed': 60,// 0:01:00 — Disconnect to Offline (2+) or Available (<2)
+        'Missed': 90,// 0:01:30 — Disconnect to Offline (1+) or Available (<1)
         'Email': 90,// 0:01:30 — Disconnect to Offline
         'Break': 915,// 0:15:15 — Disconnect to Offline
         'Break2': 915,// 0:15:15 — Disconnect to Offline
@@ -918,7 +918,7 @@ initializeWebhooks().then(function(ready) {
     // ║  States NOT listed here are alert-only (no state change).   ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-    const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
+    const AUTO_OFFLINE_STATES = ['', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║     NO DISCONNECT AGENTS — Alert Only, No Auto-Offline      ║
@@ -1997,13 +1997,13 @@ ${rows}`;
 
                 // ===== MISSED CONDITIONAL LOGIC =====
                 if (item.state === 'Missed') {
-                    if (item.missedContacts >= 2) {
+                    if (item.missedContacts >= 1) {
                         const success = await changeAgentStateToOffline(freshCell, item.agentName);
                         allAlerts[item.alertIndex].action = success ? `\u{2705} Offline (Missed: ${item.missedContacts})` : '\u{274C} Failed';
                         if (success) {
                             offlineAlerts.push(allAlerts[item.alertIndex]);
                             logDisconnection(item.agentName, item.state, item.duration, 'Offline', item.team);
-                            sendMovementLog(item.agentName, 'Missed', 'Offline', 'Missed 2+', item.team, item.duration);
+                            sendMovementLog(item.agentName, 'Missed', 'Offline', 'Missed 1+', item.team, item.duration);
 
                             sessionCounters.totalDisconnected++;
                         } else {
@@ -2014,7 +2014,7 @@ ${rows}`;
                         allAlerts[item.alertIndex].action = success ? '\u{1F7E2} Available (Missed: 0)' : '\u{274C} Failed';
                         if (success) {
                             logDisconnection(item.agentName, item.state, item.duration, 'Available', item.team);
-                            sendMovementLog(item.agentName, 'Missed', 'Available', 'Missed <2', item.team, item.duration);
+                            sendMovementLog(item.agentName, 'Missed', 'Available', 'Missed <1', item.team, item.duration);
 
                             sessionCounters.totalMovedToAvailable++;
                             availableAlerts.push(allAlerts[item.alertIndex]);
