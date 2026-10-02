@@ -703,7 +703,7 @@ initializeWebhooks().then(function(ready) {
         'Lunch': 3615,// 1:00:15 — Disconnect to Offline
         'System': 600,// 0:10:00 — Disconnect to Offline
         'On Contact': 1800,// 0:30:00 — Alert only (no disconnect)
-        'UpcomingOffline': 60// 0:01:00 — Disconnect to Offline
+        'Offline': 60// 0:01:00 — Disconnect to Offline
     };
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           OPERATION HOURS — Auto-Disconnect Outside Hours    ║
@@ -907,7 +907,10 @@ initializeWebhooks().then(function(ready) {
         'jeshin',
         'narancri',
         'ES DART',
-        'fqvn'
+        'fqvn', 
+        'isblanco',
+        'dirubio',
+        'alvazlu'
         // Agregar o quitar TMs según sea necesario
     ];
     const UPCOMING_OFFLINE_EXTENDED_THRESHOLD = 600; // 10:00 — Solo alerta, no desconecta
