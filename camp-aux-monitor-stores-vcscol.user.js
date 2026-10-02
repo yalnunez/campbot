@@ -703,7 +703,7 @@ initializeWebhooks().then(function(ready) {
         'Lunch': 3615,// 1:00:15 — Disconnect to Offline
         'System': 600,// 0:10:00 — Disconnect to Offline
         'On Contact': 1800,// 0:30:00 — Alert only (no disconnect)
-        'Offline': 60// 0:01:00 — Disconnect to Offline
+        'UpcomingOffline': 60// 0:01:00 — Disconnect to Offline
     };
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           OPERATION HOURS — Auto-Disconnect Outside Hours    ║
