@@ -2307,6 +2307,6 @@ ${table}` }),
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.7 Developed by yalnunez');
+    addStatusMessage('v0.9.3.8 Developed by yalnunez');
 
 })();
