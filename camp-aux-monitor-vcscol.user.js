@@ -954,7 +954,12 @@ initializeWebhooks().then(function(ready) {
         'saaimara',
         'augucasx',
         'rdrkat',
-        'svilaura'
+        'svilaura',
+        'molatati',
+        'nitoroos',
+        'rovandre',
+        'tojasona',
+        'villjeis'
         // Agregar o quitar TMs según sea necesario
     ];
     const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
