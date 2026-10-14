@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stores VCSCOL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.8
+// @version      0.9.3.9
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh/ remote deactivation
@@ -252,11 +252,43 @@ function refreshWebhooks() {
     return initializeWebhooks();
 }
 
+// ===== NORMALIZE TEAM NAME =====
+function normalizeTeamName(raw) {
+    if (!raw) return '';
+    var name = raw.trim().toLowerCase();
+
+    // Mapeo de prefijos a nombres específicos
+    // Si el prefijo tiene un valor asignado, se reemplaza todo el team por ese valor
+    var prefixMap = {
+        'es dart': 'velasher'
+    };
+
+    // Primero verificar si algún prefijo mapeado aplica
+    for (var prefix in prefixMap) {
+        if (name.startsWith(prefix)) {
+            return prefixMap[prefix];
+        }
+    }
+
+    // Si no, solo quitar el prefijo "team" y devolver el alias base
+    if (name.startsWith('team')) {
+        name = name.substring(4).trim();
+    }
+
+    return name;
+}
+
+    //Toma los teams del excel
 function getManagerWebhook(teamName) {
     var tm = teamName.trim().toLowerCase();
     var om = TM_TO_OM[tm];
+    if (!om) {
+        var normalized = normalizeTeamName(teamName);
+        om = TM_TO_OM[normalized];
+    }
     return om ? MANAGERS_WEBHOOKS[om] : null;
 }
+
 
 function writeMovementToExcel(agentLogin, fromState, toState, action, team, duration) {
     if (!webhooksLoaded) {
@@ -806,6 +838,7 @@ initializeWebhooks().then(function(ready) {
     ];
     const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
 
+
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           EMAIL EXTENDED TMs — No Disconnect on Email        ║
     // ║  Para estos TMs, el estado Email NO desconecta al agente.   ║
@@ -815,63 +848,62 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const EMAIL_EXTENDED_TMS = [
-'team elsbolan',
-'team jugarzo',
-'team jumurcia',
-'team lauracrc',
-'team leipaula',
-'team romecin',
-'team valgarzo',
-'team brayandv',
-'team kellyrami',
-'team gulaurac',
-'team olarta',
-'dabroche',
-'anuarado',
-'ilauraca',
-'josealso',
-'team gsarmiec',
-'rivediaj',
-'dianapam',
-'team dianapam',
-'ranbello',
-'juborjav',
-'acordead',
-'ynicolca',
-'juamartt',
-'lopeglui',
-'legnayoh',
-'rendonbe',
-'didiazva',
-'fqvn',
-'jonleoj',
-'cxfriasa',
-'araujh',
-'sebasus',
-'storresg',
-'aradan',
-'jdiazhur',
-'scstano',
-'jorgmune',
-'alopzg',
-'ramariaj',
-'perginna',
-'adouglyg',
-'glafonso',
-'mosquchr',
-'chrixp',
-'fonjairo',
-'lunarva',
-'javdiazp',
-'catanolc',
-'sfrancn',
-'jenargue',
-'jeshin',
-'narancri',
-'ES DART',
-'jorgenll',
-'gsamierc',
-'velasher'
+        'elsbolan',
+        'jugarzo',
+        'jumurcia',
+        'lauracrc',
+        'leipaula',
+        'romecin',
+        'valgarzo',
+        'brayandv',
+        'kellyrami',
+        'gulaurac',
+        'olarta',
+        'dabroche',
+        'anuarado',
+        'ilauraca',
+        'josealso',
+        'gsarmiec',
+        'rivediaj',
+        'dianapam',
+        'ranbello',
+        'juborjav',
+        'acordead',
+        'ynicolca',
+        'juamartt',
+        'lopeglui',
+        'legnayoh',
+        'rendonbe',
+        'didiazva',
+        'fqvn',
+        'jonleoj',
+        'cxfriasa',
+        'araujh',
+        'sebasus',
+        'storresg',
+        'aradan',
+        'jdiazhur',
+        'scstano',
+        'jorgmune',
+        'alopzg',
+        'ramariaj',
+        'perginna',
+        'adouglyg',
+        'glafonso',
+        'mosquchr',
+        'chrixp',
+        'fonjairo',
+        'lunarva',
+        'javdiazp',
+        'catanolc',
+        'sfrancn',
+        'jenargue',
+        'jeshin',
+        'narancri',
+        'ES DART',
+        'jorgenll',
+        'gsamierc',
+        'velasher'
         // Agregar o quitar TMs según sea necesario
     ];
     const EMAIL_EXTENDED_THRESHOLD = 900; // 15:00 — Solo alerta, no desconecta
@@ -884,17 +916,16 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const UPCOMING_OFFLINE_EXTENDED_TMS = [
-        'team kellyrami',
-        'team gulaurac',
-        'team olarta',
+        'kellyrami',
+        'gulaurac',
+        'olarta',
         'dabroche',
         'anuarado',
         'ilauraca',
         'josealso',
-        'team gsarmiec',
+        'gsarmiec',
         'rivediaj',
         'dianapam',
-        'team dianapam',
         'ranbello',
         'juborjav',
         'acordead',
@@ -907,13 +938,14 @@ initializeWebhooks().then(function(ready) {
         'jeshin',
         'narancri',
         'ES DART',
-        'fqvn', 
+        'fqvn',
         'isblanco',
         'dirubio',
         'alvazlu'
         // Agregar o quitar TMs según sea necesario
     ];
     const UPCOMING_OFFLINE_EXTENDED_THRESHOLD = 600; // 10:00 — Solo alerta, no desconecta
+
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           AUTO-OFFLINE STATES                                ║
     // ║  States where the bot will automatically disconnect agents   ║
@@ -1891,11 +1923,19 @@ ${rows}`;
                 } else if (state === 'On Contact') {
                     // On Contact: New Hires obtienen umbral extendido (60 min), resto el estándar (30 min)
                     const teamCheck = cells[idx.team].textContent.trim().toLowerCase();
-                    effectiveThreshold = NEW_HIRE_TMS.includes(teamCheck) ? NEW_HIRE_ON_CONTACT_THRESHOLD : AUX_THRESHOLDS['On Contact'];
+                    const teamCheckNorm = normalizeTeamName(cells[idx.team].textContent);
+                    effectiveThreshold = (NEW_HIRE_TMS.includes(teamCheck) || NEW_HIRE_TMS.includes(teamCheckNorm))
+                        ? NEW_HIRE_ON_CONTACT_THRESHOLD
+                    : AUX_THRESHOLDS['On Contact'];
+
+
                 } else if (state === 'Email') {
                     // Email: TMs extendidos obtienen 30 min (solo alerta), resto 1:30 (desconecta)
                     const teamCheckEmail = cells[idx.team].textContent.trim().toLowerCase();
-                    if (EMAIL_EXTENDED_TMS.includes(teamCheckEmail)) {
+                    const teamCheckEmailNorm = normalizeTeamName(cells[idx.team].textContent);
+                    if (EMAIL_EXTENDED_TMS.includes(teamCheckEmail) || EMAIL_EXTENDED_TMS.includes(teamCheckEmailNorm)) {
+
+
                         // TM en la lista: threshold de 30 min, solo alerta (no desconecta)
                         effectiveThreshold = EMAIL_EXTENDED_THRESHOLD;
                     } else {
@@ -1905,7 +1945,10 @@ ${rows}`;
                 } else if (state === 'UpcomingOffline') {
                     // UpcomingOffline: TMs extendidos obtienen 10 min (solo alerta), resto el estándar (desconecta)
                     const teamCheckUpcoming = cells[idx.team].textContent.trim().toLowerCase();
-                    if (UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcoming)) {
+                    const teamCheckUpcomingNorm = normalizeTeamName(cells[idx.team].textContent);
+                    if (UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcoming) || UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcomingNorm)) {
+
+
                         // TM en la lista: threshold de 10 min, solo alerta (no desconecta)
                         effectiveThreshold = UPCOMING_OFFLINE_EXTENDED_THRESHOLD;
                     } else {
@@ -1931,15 +1974,17 @@ ${rows}`;
                     // Check EMAIL_EXTENDED_TMS — no auto-offline para estado Email
                     if (state === 'Email') {
                         const teamCheckOffline = cells[idx.team].textContent.trim().toLowerCase();
-                        if (EMAIL_EXTENDED_TMS.includes(teamCheckOffline)) {
+                        const teamCheckOfflineNorm = normalizeTeamName(cells[idx.team].textContent);
+                        if (EMAIL_EXTENDED_TMS.includes(teamCheckOffline) || EMAIL_EXTENDED_TMS.includes(teamCheckOfflineNorm)) {
                             shouldAutoOffline = false; // Solo alerta, no desconecta
                         }
                     }
 
                     // Check UPCOMING_OFFLINE_EXTENDED_TMS — no auto-offline para estado UpcomingOffline
-                    if (state === 'UpcomingOffline') {
-                        const teamCheckUpcomingOffline = cells[idx.team].textContent.trim().toLowerCase();
-                        if (UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcomingOffline)) {
+                   if (state === 'UpcomingOffline') {
+                       const teamCheckUpcomingOffline = cells[idx.team].textContent.trim().toLowerCase();
+                       const teamCheckUpcomingOfflineNorm = normalizeTeamName(cells[idx.team].textContent);
+                       if (UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcomingOffline) || UPCOMING_OFFLINE_EXTENDED_TMS.includes(teamCheckUpcomingOfflineNorm)) {
                             shouldAutoOffline = false; // Solo alerta, no desconecta
                         }
                     }
@@ -2111,10 +2156,13 @@ ${rows}`;
         const byOM = {};
         const noOM = [];
 
-        alerts.forEach(alert => {
-            const tm = (alert.team || '').trim().toLowerCase();
-            const om = TM_TO_OM[tm];
-            if (om) {
+    alerts.forEach(alert => {
+        const tm = (alert.team || '').trim().toLowerCase();
+        var om = TM_TO_OM[tm];
+        if (!om) {
+            om = TM_TO_OM[normalizeTeamName(alert.team)];
+        }
+        if (om) {
                 if (!byOM[om]) byOM[om] = [];
                 byOM[om].push(alert);
             } else {
@@ -2169,9 +2217,12 @@ ${rows}`;
         });
 
         for (const [team, teamAlerts] of Object.entries(byTeam)) {
-            const url = TEAM_WEBHOOKS[team];
+            var url = TEAM_WEBHOOKS[team];
             if (!url) {
-                addStatusMessage(`\u{26A0}\u{FE0F} No webhook for team: "${team}"`);
+                url = TEAM_WEBHOOKS[normalizeTeamName(team)];
+            }
+            if (!url) {
+                addStatusMessage(`⚠️ No webhook for team: "${team}"`);
                 continue;
             }
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
@@ -2207,8 +2258,13 @@ ${rows}` }),
         });
 
         for (const [team, teamAlerts] of Object.entries(byTeam)) {
-            const url = TEAM_WEBHOOKS[team];
+            var url = TEAM_WEBHOOKS[team];
+            if (!url) {
+                url = TEAM_WEBHOOKS[normalizeTeamName(team)];
+            }
             if (!url) continue;
+
+
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
             const mentions = clean.map(a => `@${a.name}`).join('\n');
             const header = `${mentions}\n**Alerta:** Fuiste movido a **Offline** por Missed Contacts. Por favor ve a **Available**, si estás teniendo problemas contacta a tu **Team Manager**.\n\n| Agent | State | Missed Contacts | Duration |\n|-------|-------|--------------------|----------|`;
@@ -2307,6 +2363,6 @@ ${table}` }),
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.8 Developed by yalnunez');
+    addStatusMessage('v0.9.3.9 Developed by yalnunez');
 
 })();
