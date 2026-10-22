@@ -856,7 +856,7 @@ initializeWebhooks().then(function(ready) {
         'romecin',
         'valgarzo',
         'brayandv',
-        'kellyrami',
+        'kelyrami',
         'gulaurac',
         'olarta',
         'dabroche',
@@ -916,7 +916,7 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const UPCOMING_OFFLINE_EXTENDED_TMS = [
-        'kellyrami',
+        'kelyrami',
         'gulaurac',
         'olarta',
         'dabroche',
