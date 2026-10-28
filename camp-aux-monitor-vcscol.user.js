@@ -788,7 +788,7 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const AUX_THRESHOLDS = {
-        'Available': 10800,//3:00:00 — Alert only (no disconnect)
+        'Available': 1200,//0:20:00 — Alert only (no disconnect)
         'Meeting': 10800,// 3:00:00 — Alert only (no disconnect)
         'Training': 10800,// 3:00:00 — Alert only (no disconnect)
         'Project': 10800,// 3:00:00 — Alert only (no disconnect)
