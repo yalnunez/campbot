@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stores VCSCOL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.9
+// @version      0.9.3.11
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh/ remote deactivation
@@ -617,7 +617,7 @@ initializeWebhooks().then(function(ready) {
                     }
 
                     // Esperar 3.5s entre cada agente
-                    await new Promise(resolve => setTimeout(resolve, 3500));
+                    await delay(3500);
                 }
             }
 
@@ -1073,6 +1073,21 @@ initializeWebhooks().then(function(ready) {
             delayResolvers[id] = resolve;
             timerWorker.postMessage({ id, ms });
         });
+    }
+
+    // ANTI-THROTTLE cancellable timeout (reemplazo de setTimeout nativo para loops largos,
+    // igual que el fix aplicado en Stitch): devuelve un id que se puede cancelar con clearWorkerTimeout.
+    function setWorkerTimeout(callback, ms) {
+        const id = ++delayIdCounter;
+        delayResolvers[id] = callback;
+        timerWorker.postMessage({ id, ms });
+        return id;
+    }
+
+    function clearWorkerTimeout(id) {
+        if (id && delayResolvers[id]) {
+            delete delayResolvers[id];
+        }
     }
 
     function formatSeconds(s) {
@@ -1649,7 +1664,7 @@ ${rows}`;
 
     function closeOpenDropdown() {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-        setTimeout(() => { document.body.click(); }, 200);
+        setWorkerTimeout(() => { document.body.click(); }, 200);
     }
 
     function isInFloatingContext(element) {
@@ -1690,7 +1705,7 @@ ${rows}`;
             if (remoteStatus === 'OFF') {
                 addStatusMessage('🛑 Bot pausado remotamente desde el dashboard.');
                 isMonitoring = false;
-                if (monitoringTimeout) { clearTimeout(monitoringTimeout); monitoringTimeout = null; }
+                if (monitoringTimeout) { clearWorkerTimeout(monitoringTimeout); monitoringTimeout = null; }
                 startBtn.disabled = false;
                 pauseBtn.disabled = true;
                 return;
@@ -1702,7 +1717,7 @@ ${rows}`;
         const sessionOk = await checkAndResumeSession();
         if (!sessionOk) {
             addStatusMessage('\u26A0\uFE0F Session could not be resumed, retrying in 30s...');
-            monitoringTimeout = setTimeout(monitoringCycle, 30000);
+            monitoringTimeout = setWorkerTimeout(monitoringCycle, 30000);
             return;
         }
 
@@ -1755,7 +1770,7 @@ ${rows}`;
             }
 
             addStatusMessage('⏳ Next cycle in 60s...');
-            monitoringTimeout = setTimeout(monitoringCycle, 60000);
+            monitoringTimeout = setWorkerTimeout(monitoringCycle, 60000);
             return;
         }
 
@@ -1780,7 +1795,7 @@ ${rows}`;
                 onerror: () => { addStatusMessage('\u274C Refresh Stopped alert failed'); }
             });
             addStatusMessage('\u23F3 Next cycle in 60s...');
-            monitoringTimeout = setTimeout(monitoringCycle, 60000);
+            monitoringTimeout = setWorkerTimeout(monitoringCycle, 60000);
             return;
         }
 
@@ -1803,11 +1818,14 @@ ${rows}`;
 
         await delay(3000);
         if (!isMonitoring) return;
-        clickCampPlayButton();
+        const playFound = clickCampPlayButton();
+        if (!playFound) {
+            addStatusMessage('\u26A0\uFE0F Play button not found - bypassing, ending cycle...');
+        }
 
         if (!isMonitoring) return;
         addStatusMessage('\u23F3 Next cycle in 60s...');
-        monitoringTimeout = setTimeout(monitoringCycle, 60000);
+        monitoringTimeout = setWorkerTimeout(monitoringCycle, 60000);
     }
 
     // ===== PROCESS TABLE DATA =====
@@ -2293,7 +2311,10 @@ ${rows}` }),
         });
 
         for (const [team, teamAlerts] of Object.entries(byTeam)) {
-            const url = TEAM_WEBHOOKS[team];
+            var url = TEAM_WEBHOOKS[team];
+            if (!url) {
+                url = TEAM_WEBHOOKS[normalizeTeamName(team)];
+            }
             if (!url) continue;
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
             const mentions = clean.map(a => `@${a.name}`).join('\n');
@@ -2337,7 +2358,7 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
     pauseBtn.addEventListener('click', () => {
         if (isMonitoring) {
             isMonitoring = false;
-            if (monitoringTimeout) { clearTimeout(monitoringTimeout); monitoringTimeout = null; }
+            if (monitoringTimeout) { clearWorkerTimeout(monitoringTimeout); monitoringTimeout = null; }
             addStatusMessage('\u{23F8}\u{FE0F} Monitoring paused');
             sendLogToWebhook();
             writeHeartbeat('OFF');
@@ -2347,6 +2368,6 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.9 Developed by yalnunez');
+    addStatusMessage('v0.9.3.11 Developed by yalnunez');
 
 })();
