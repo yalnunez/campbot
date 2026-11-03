@@ -823,16 +823,6 @@ initializeWebhooks().then(function(ready) {
 
       const NEW_HIRE_TMS = [
         'camargis',
-        'claraaqu',
-        'cruizher',
-        'florezhi',
-        'gonzylau',
-        'jcaldani',
-        'llandine',
-        'luribesa',
-        'robayotl',
-        'sandreac',
-        'rdrkat',
         'svilaura'
         // Agregar o quitar TMs según sea necesario
     ];
@@ -903,7 +893,10 @@ initializeWebhooks().then(function(ready) {
         'ES DART',
         'jorgenll',
         'gsamierc',
-        'velasher'
+        'velasher',
+        'isblanco',
+        'dirubio',
+        'alvazlu'
         // Agregar o quitar TMs según sea necesario
     ];
     const EMAIL_EXTENDED_THRESHOLD = 900; // 15:00 — Solo alerta, no desconecta
