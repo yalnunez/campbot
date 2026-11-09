@@ -896,7 +896,7 @@ initializeWebhooks().then(function(ready) {
         'velasher',
         'isblanco',
         'dirubio',
-        'galveesl'
+        'galveesl',
         'alvazlu'
         // Agregar o quitar TMs según sea necesario
     ];
