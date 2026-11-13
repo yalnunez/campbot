@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stores VCSCOL Camp bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.11
+// @version      0.9.3.14
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-stores-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh/ remote deactivation
@@ -18,6 +18,68 @@
 
 (function () {
     'use strict';
+
+    // ===== v0.9.3.12: SILENT-FAILURE HARDENING HELPERS =====
+    // Every network call goes through gmRequest(): it adds a timeout, guarantees that
+    // exactly one of onload/onerror runs, logs callback exceptions, and refuses empty URLs.
+    const GM_REQUEST_TIMEOUT_MS = 20000;
+    // Cycle/watchdog state (declared early with var so addStatusMessage can use it at any time)
+    var cycleGen = 0, cycleScheduledGen = -1, cycleInProgress = false;
+    var lastActivityAt = Date.now(), lastWebhookAttempt = Date.now();
+    const _uiWarnLast = {};
+    // Shows a warning in the bot panel (throttled: same message at most every 5 min).
+    // Safe to call before the panel exists (falls back to console only).
+    function uiWarn(message, key) {
+        key = key || String(message).substring(0, 80);
+        if (Object.keys(_uiWarnLast).length > 300) { for (const k in _uiWarnLast) delete _uiWarnLast[k]; }
+        const now = Date.now();
+        if (_uiWarnLast[key] && now - _uiWarnLast[key] < 5 * 60 * 1000) return;
+        _uiWarnLast[key] = now;
+        try { addStatusMessage(message); } catch (e) { /* panel not ready yet: console already has it */ }
+    }
+    // Background error: console with details + visible panel warning.
+    function reportBg(message, ...details) {
+        console.error('[Heimdall] ' + message, ...details);
+        uiWarn(message);
+    }
+    function gmRequest(opts) {
+        let done = false;
+        let hardTimer = null;
+        const finish = (fn, arg) => {
+            if (done) return;
+            done = true;
+            if (hardTimer) clearTimeout(hardTimer);
+            if (!fn) return;
+            try { fn(arg); } catch (e) { reportBg('❌ Request callback error: ' + (e && e.message ? e.message : e), e); }
+        };
+        if (!opts || !opts.url) {
+            reportBg('❌ Request skipped: empty URL (check the Webhook_Config Excel)');
+            finish(opts && opts.onerror, { error: 'EMPTY_URL' });
+            return;
+        }
+        const timeoutMs = opts.timeout || GM_REQUEST_TIMEOUT_MS;
+        const wrapped = Object.assign({}, opts, {
+            timeout: timeoutMs,
+            onload: (r) => finish(opts.onload, r),
+            onerror: (e) => finish(opts.onerror, e),
+            onabort: (e) => finish(opts.onerror, e),
+            ontimeout: (e) => {
+                console.error('[Heimdall] ⏱️ Request timeout (' + timeoutMs + 'ms): ' + (opts.method || 'GET') + ' ' + String(opts.url).substring(0, 120));
+                finish(opts.onerror, e || { error: 'TIMEOUT' });
+            }
+        });
+        // Backup in case the userscript manager never fires any callback.
+        hardTimer = setTimeout(() => {
+            console.error('[Heimdall] ⏱️ Hard timeout, no callback: ' + String(opts.url).substring(0, 120));
+            finish(opts.onerror, { error: 'HARD_TIMEOUT' });
+        }, timeoutMs + 15000);
+        try {
+            GM_xmlhttpRequest(wrapped);
+        } catch (e) {
+            reportBg('❌ Request could not be sent: ' + (e && e.message ? e.message : e), e);
+            finish(opts.onerror, e);
+        }
+    }
 
 let BOT_OPERATOR = '';
 while (!BOT_OPERATOR) {
@@ -46,6 +108,8 @@ var LOG_WEBHOOK_URL = '';
 var webhooksLoaded = false;
 var lastWebhookLoad = 0;
 var WEBHOOK_CACHE_DURATION = 30 * 60 * 1000;
+var webhookSource = 'none';
+var lastWebhookError = '';
 
 // ===== LOAD FROM SHAREPOINT (API v1.0 + SheetJS) =====
 function loadWebhooksFromSharePoint() {
@@ -73,10 +137,11 @@ function loadWebhooksFromSharePoint() {
 }
 
 function downloadAndParseExcel(resolve, reject) {
-    GM_xmlhttpRequest({
+    gmRequest({
         method: 'GET',
         url: EXCEL_DOWNLOAD_URL,
         responseType: 'arraybuffer',
+        timeout: 60000,
         headers: {
             'Accept': 'application/octet-stream'
         },
@@ -107,6 +172,7 @@ function downloadAndParseExcel(resolve, reject) {
                     console.log('[Heimdall]    Managers: ' + Object.keys(MANAGERS_WEBHOOKS).length);
                     console.log('[Heimdall]    TM→OM: ' + Object.keys(TM_TO_OM).length);
                     console.log('[Heimdall]    Team webhooks: ' + Object.keys(TEAM_WEBHOOKS).length);
+                    webhookSource = 'SharePoint';
                     resolve(true);
 
                 } else if (response.status === 401 || response.status === 403) {
@@ -118,7 +184,7 @@ function downloadAndParseExcel(resolve, reject) {
                 }
             } catch (e) {
                 console.error('[Heimdall] ❌ Error parseando Excel:', e);
-                reject('PARSE_ERROR');
+                reject(e && e.message && e.message.indexOf('INVALID_CONFIG') === 0 ? e.message : 'PARSE_ERROR');
             }
         },
         onerror: function(error) {
@@ -130,6 +196,7 @@ function downloadAndParseExcel(resolve, reject) {
 
     // ===== PARSER (igual que antes) =====
     function parseWebhookData(rows) {
+        var _prev = { m: MANAGERS_WEBHOOKS, t: TM_TO_OM, w: TEAM_WEBHOOKS, mv: MOVEMENTS_WEBHOOK, lg: LOG_WEBHOOK_URL, p: PWD_AGENTS, a: ACCOMMODATION_AGENTS };
         MANAGERS_WEBHOOKS = {};
         TM_TO_OM = {};
         TEAM_WEBHOOKS = {};
@@ -169,10 +236,16 @@ function downloadAndParseExcel(resolve, reject) {
                     }
                     break;
                 case 'TEAM_WEBHOOKS':
-                    if (cellA && cellC && cellC.indexOf('https://') === 0) {
-                        TEAM_WEBHOOKS[cellA.toLowerCase()] = cellC;
-                        if (cellB && !TM_TO_OM[cellA.toLowerCase()]) {
-                            TM_TO_OM[cellA.toLowerCase()] = cellB.toLowerCase();
+                    // v0.9.3.14: TEAM WEBHOOKS is the TM->OM source. The OM is taken from col B even
+                    // when the row has no webhook yet, so a TM never loses its OM. A legacy
+                    // TM TO OM MAPPING section (if still present) keeps priority.
+                    if (cellA) {
+                        var _tmKey = cellA.toLowerCase();
+                        if (cellB && !TM_TO_OM[_tmKey]) {
+                            TM_TO_OM[_tmKey] = cellB.toLowerCase();
+                        }
+                        if (cellC && cellC.indexOf('https://') === 0) {
+                            TEAM_WEBHOOKS[_tmKey] = cellC;
                         }
                     }
                     break;
@@ -193,6 +266,14 @@ function downloadAndParseExcel(resolve, reject) {
             }
         }
 
+        // v0.9.3.12: never accept (or cache) an empty/broken config
+        var _nM = Object.keys(MANAGERS_WEBHOOKS).length, _nT = Object.keys(TM_TO_OM).length, _nW = Object.keys(TEAM_WEBHOOKS).length;
+        if (_nM === 0 || _nT === 0 || _nW === 0) {
+            MANAGERS_WEBHOOKS = _prev.m; TM_TO_OM = _prev.t; TEAM_WEBHOOKS = _prev.w; MOVEMENTS_WEBHOOK = _prev.mv; LOG_WEBHOOK_URL = _prev.lg; PWD_AGENTS = _prev.p; ACCOMMODATION_AGENTS = _prev.a;
+            throw new Error('INVALID_CONFIG: Managers=' + _nM + ', TM->OM=' + _nT + ', Team webhooks=' + _nW + ' (check sheet name and section headers)');
+        }
+        if (!MOVEMENTS_WEBHOOK) console.warn('[Heimdall] ⚠️ MOVEMENTS_WEBHOOK empty: alerts for teams without OM will not be sent');
+        if (!LOG_WEBHOOK_URL) console.warn('[Heimdall] ⚠️ LOG_WEBHOOK_URL empty: session log will not be sent');
         GM_setValue('cached_MANAGERS_WEBHOOKS', JSON.stringify(MANAGERS_WEBHOOKS));
         GM_setValue('cached_TM_TO_OM', JSON.stringify(TM_TO_OM));
         GM_setValue('cached_TEAM_WEBHOOKS', JSON.stringify(TEAM_WEBHOOKS));
@@ -210,30 +291,32 @@ function downloadAndParseExcel(resolve, reject) {
 
     function loadWebhooksFromCache() {
         try {
-            MANAGERS_WEBHOOKS = JSON.parse(GM_getValue('cached_MANAGERS_WEBHOOKS', '{}'));
-            TM_TO_OM = JSON.parse(GM_getValue('cached_TM_TO_OM', '{}'));
-            TEAM_WEBHOOKS = JSON.parse(GM_getValue('cached_TEAM_WEBHOOKS', '{}'));
+            // v0.9.3.12: parse into locals first; only replace the live config if the cache is valid
+            var m = JSON.parse(GM_getValue('cached_MANAGERS_WEBHOOKS', '{}'));
+            var tm = JSON.parse(GM_getValue('cached_TM_TO_OM', '{}'));
+            var tw = JSON.parse(GM_getValue('cached_TEAM_WEBHOOKS', '{}'));
+            var pwd = JSON.parse(GM_getValue('cached_PWD_AGENTS', '[]'));
+            var acc = JSON.parse(GM_getValue('cached_ACCOMMODATION_AGENTS', '[]'));
+            var hasData = Object.keys(m).length > 0 && Object.keys(tm).length > 0 && Object.keys(tw).length > 0;
+            if (!hasData) {
+                console.error('[Heimdall] ❌ Cache local vacío o incompleto: se mantiene la configuración actual');
+                return false;
+            }
+            MANAGERS_WEBHOOKS = m; TM_TO_OM = tm; TEAM_WEBHOOKS = tw;
             MOVEMENTS_WEBHOOK = GM_getValue('cached_MOVEMENTS_WEBHOOK', '');
             LOG_WEBHOOK_URL = GM_getValue('cached_LOG_WEBHOOK_URL', '');
-            PWD_AGENTS = JSON.parse(GM_getValue('cached_PWD_AGENTS', '[]'));
-            ACCOMMODATION_AGENTS = JSON.parse(GM_getValue('cached_ACCOMMODATION_AGENTS', '[]'));
-
-            var hasData = Object.keys(MANAGERS_WEBHOOKS).length > 0 &&
-                          Object.keys(TM_TO_OM).length > 0 &&
-                          Object.keys(TEAM_WEBHOOKS).length > 0;
-            if (hasData) {
-                webhooksLoaded = true;
-                console.log('[Heimdall] 📦 Webhooks cargados desde cache local');
-                console.log('[Heimdall] 📦 PWD_AGENTS desde cache: ' + PWD_AGENTS.length);
-                console.log('[Heimdall] 📦 ACCOMMODATION_AGENTS desde cache: ' + ACCOMMODATION_AGENTS.length);
-                return true;
-            }
-            return false;
+            PWD_AGENTS = pwd; ACCOMMODATION_AGENTS = acc;
+            webhooksLoaded = true;
+            console.log('[Heimdall] 📦 Webhooks cargados desde cache local');
+            console.log('[Heimdall] 📦 PWD_AGENTS desde cache: ' + PWD_AGENTS.length);
+            console.log('[Heimdall] 📦 ACCOMMODATION_AGENTS desde cache: ' + ACCOMMODATION_AGENTS.length);
+            return true;
         } catch (e) {
             console.error('[Heimdall] ❌ Error cargando cache:', e);
             return false;
         }
     }
+
 // ===== INICIALIZACIÓN =====
 function initializeWebhooks() {
     if (webhooksLoaded && (Date.now() - lastWebhookLoad) < WEBHOOK_CACHE_DURATION) {
@@ -241,7 +324,8 @@ function initializeWebhooks() {
     }
     return loadWebhooksFromSharePoint().catch(function(error) {
         console.warn('[Heimdall] ⚠️ Falló SharePoint (' + error + '). Intentando cache...');
-        if (loadWebhooksFromCache()) { return true; }
+        lastWebhookError = String(error);
+        if (loadWebhooksFromCache()) { webhookSource = 'cache'; return true; }
         console.error('[Heimdall] ❌ No hay webhooks disponibles.');
         return false;
     });
@@ -292,7 +376,7 @@ function getManagerWebhook(teamName) {
 
 function writeMovementToExcel(agentLogin, fromState, toState, action, team, duration) {
     if (!webhooksLoaded) {
-        debugLog('⚠️ Webhooks not loaded, skipping movement log');
+        uiWarn('⚠️ Webhooks not loaded: movement log to SharePoint skipped');
         return;
     }
 
@@ -315,20 +399,20 @@ function writeMovementToExcel(agentLogin, fromState, toState, action, team, dura
 
     var om = TM_TO_OM[(team || '').trim().toLowerCase()] || 'N/A';
 
-    GM_xmlhttpRequest({
+    gmRequest({
         method: 'POST',
         url: SP_YALNUNEZ + '/_api/contextinfo',
         headers: { 'Accept': 'application/json;odata=verbose' },
         onload: function(digestResp) {
             try {
                 if (digestResp.status !== 200) {
-                    console.error('[Heimdall] ❌ Failed to get digest: HTTP ' + digestResp.status);
+                    reportBg('❌ Failed to get digest: HTTP ' + digestResp.status);
                     return;
                 }
                 var digestData = JSON.parse(digestResp.responseText);
                 var digest = digestData.d.GetContextWebInformation.FormDigestValue;
 
-                GM_xmlhttpRequest({
+                gmRequest({
                     method: 'POST',
                     url: SP_YALNUNEZ + "/_api/web/lists/getbytitle('Stores_Heimdall_Movements_Log')/items",
                     headers: {
@@ -353,27 +437,27 @@ function writeMovementToExcel(agentLogin, fromState, toState, action, team, dura
                         if (response.status >= 200 && response.status < 300) {
                             debugLog('📊 SP List log: ' + agentLogin + ' ' + fromState + ' → ' + toState);
                         } else {
-                            console.error('[Heimdall] ❌ SP List write HTTP ' + response.status, response.responseText ? response.responseText.substring(0, 500) : '');
+                            reportBg('❌ SP List write HTTP ' + response.status, response.responseText ? response.responseText.substring(0, 500) : '');
                         }
                     },
-                    onerror: function() { console.error('[Heimdall] ❌ SP List write network error'); }
+                    onerror: function() { reportBg('❌ SP List write network error'); }
                 });
-            } catch (e) { console.error('[Heimdall] ❌ Error getting digest:', e); }
+            } catch (e) { reportBg('❌ Error getting digest:', e); }
         },
-        onerror: function() { console.error('[Heimdall] ❌ Digest request network error'); }
+        onerror: function() { reportBg('❌ Digest request network error'); }
     });
 }
 
 // ===== HEARTBEAT DE ESTADO (una fila por operador, se actualiza) =====
 function writeHeartbeat(status) {
-    GM_xmlhttpRequest({
+    gmRequest({
         method: 'POST',
         url: SP_YALNUNEZ + '/_api/contextinfo',
         headers: { 'Accept': 'application/json;odata=verbose' },
         onload: function(digestResp) {
             try {
                 if (digestResp.status !== 200) {
-                    console.error('[Heimdall] ❌ Heartbeat digest HTTP ' + digestResp.status);
+                    reportBg('❌ Heartbeat digest HTTP ' + digestResp.status);
                     return;
                 }
                 var digest = JSON.parse(digestResp.responseText).d.GetContextWebInformation.FormDigestValue;
@@ -390,20 +474,28 @@ function writeHeartbeat(status) {
 
                 // Paso 1: Buscar si ya existe la fila de este operador
                 var findUrl = SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST +
-                              "')/items?$select=Id,Title&$filter=Title eq '" + me + "'&$top=1";
+                              "')/items?$select=Id,Title&$filter=Title eq '" + me + "'&$orderby=Id asc&$top=20";
 
-                GM_xmlhttpRequest({
+                gmRequest({
                     method: 'GET',
                     url: findUrl,
                     headers: { 'Accept': 'application/json;odata=verbose' },
                     onload: function(findResp) {
                         var existingId = null;
+                        var lookupOk = false;
                         try {
                             if (findResp.status === 200) {
                                 var results = JSON.parse(findResp.responseText).d.results;
+                                lookupOk = true;
                                 if (results && results.length > 0) existingId = results[0].Id;
+                                if (results && results.length > 1) uiWarn('⚠️ ' + results.length + ' status rows for ' + me + ' in ' + BOT_STATUS_LIST + ': delete the duplicates (updating the oldest)');
                             }
-                        } catch (e) {}
+                        } catch (e) { console.error('[Heimdall] ❌ Heartbeat lookup parse error:', e); }
+                        if (!lookupOk) {
+                            // v0.9.3.12: do NOT create a new row when the lookup failed (avoids duplicate rows that break the kill switch)
+                            reportBg('⚠️ Heartbeat lookup failed (HTTP ' + findResp.status + '): skipped this cycle');
+                            return;
+                        }
 
                         var payload = JSON.stringify({
                             '__metadata': { 'type': 'SP.Data.Heimdall_x005f_Bot_x005f_StatusListItem' },
@@ -415,7 +507,7 @@ function writeHeartbeat(status) {
 
                         if (existingId) {
                             // Ya existe → ACTUALIZAR esa fila (MERGE)
-                            GM_xmlhttpRequest({
+                            gmRequest({
                                 method: 'POST',
                                 url: SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST + "')/items(" + existingId + ")",
                                 headers: {
@@ -428,13 +520,13 @@ function writeHeartbeat(status) {
                                 data: payload,
                                 onload: function(r) {
                                     if (r.status >= 200 && r.status < 300) debugLog('💓 Heartbeat MERGE: ' + status + ' (' + BOT_VERTICAL + ')');
-                                    else console.error('[Heimdall] ❌ Heartbeat MERGE HTTP ' + r.status);
+                                    else reportBg('❌ Heartbeat MERGE HTTP ' + r.status);
                                 },
-                                onerror: function() { console.error('[Heimdall] ❌ Heartbeat MERGE network error'); }
+                                onerror: function() { reportBg('❌ Heartbeat MERGE network error'); }
                             });
                         } else {
                             // No existe → CREAR fila nueva
-                            GM_xmlhttpRequest({
+                            gmRequest({
                                 method: 'POST',
                                 url: SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST + "')/items",
                                 headers: {
@@ -445,47 +537,49 @@ function writeHeartbeat(status) {
                                 data: payload,
                                 onload: function(r) {
                                     if (r.status >= 200 && r.status < 300) debugLog('💓 Heartbeat CREATE: ' + status + ' (' + BOT_VERTICAL + ')');
-                                    else console.error('[Heimdall] ❌ Heartbeat CREATE HTTP ' + r.status, r.responseText ? r.responseText.substring(0, 300) : '');
+                                    else reportBg('❌ Heartbeat CREATE HTTP ' + r.status, r.responseText ? r.responseText.substring(0, 300) : '');
                                 },
-                                onerror: function() { console.error('[Heimdall] ❌ Heartbeat CREATE network error'); }
+                                onerror: function() { reportBg('❌ Heartbeat CREATE network error'); }
                             });
                         }
                     },
-                    onerror: function() { console.error('[Heimdall] ❌ Heartbeat find network error'); }
+                    onerror: function() { reportBg('❌ Heartbeat find network error'); }
                 });
-            } catch (e) { console.error('[Heimdall] ❌ Heartbeat error:', e); }
+            } catch (e) { reportBg('❌ Heartbeat error:', e); }
         },
-        onerror: function() { console.error('[Heimdall] ❌ Heartbeat digest network error'); }
+        onerror: function() { reportBg('❌ Heartbeat digest network error'); }
     });
 }
 // ===== LEER KILL SWITCH (Status del operador en la lista) =====
 function checkRemoteStatus(callback) {
     var me = BOT_OPERATOR.trim().toLowerCase();
     var url = SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST +
-              "')/items?$select=Id,Title,Status&$filter=Title eq '" + me + "'&$top=1";
-    GM_xmlhttpRequest({
+              "')/items?$select=Id,Title,Status&$filter=Title eq '" + me + "'&$top=20";
+    gmRequest({
         method: 'GET',
         url: url,
         headers: { 'Accept': 'application/json;odata=verbose' },
         onload: function(r) {
             try {
-                if (r.status !== 200) { callback('ON'); return; } // si falla, no apagar
+                if (r.status !== 200) { uiWarn('⚠️ Kill switch unreadable (HTTP ' + r.status + '): continuing ON'); callback('ON'); return; } // si falla, no apagar
                 var results = JSON.parse(r.responseText).d.results;
                 if (results && results.length > 0) {
-                    var status = (results[0].Status || 'ON').toString().trim().toUpperCase();
-                    callback(status);
+                    if (results.length > 1) uiWarn('⚠️ ' + results.length + ' status rows for ' + me + ' in ' + BOT_STATUS_LIST + ': delete the duplicates');
+                    var anyOff = results.some(function(x) { return (x.Status || 'ON').toString().trim().toUpperCase() === 'OFF'; });
+                    callback(anyOff ? 'OFF' : 'ON');
                 } else {
                     callback('ON'); // sin fila = no apagar
                 }
-            } catch(e) { callback('ON'); }
+            } catch(e) { uiWarn('⚠️ Kill switch response unreadable: continuing ON'); callback('ON'); }
         },
-        onerror: function() { callback('ON'); } // si falla la red, no apagar
+        onerror: function() { uiWarn('⚠️ Kill switch unreachable (network/timeout): continuing ON'); callback('ON'); } // si falla la red, no apagar
     });
 }
 // ===== CARGAR WEBHOOKS (sin bloquear el UI) =====
 initializeWebhooks().then(function(ready) {
     if (ready) {
         console.log('[Heimdall] ✅ Webhooks listos');
+        if (webhookSource === 'cache') uiWarn('⚠️ Using cached webhooks: SharePoint failed (' + lastWebhookError + '). Open the Excel in SharePoint and reload CAMP to refresh.');
     } else {
         console.warn('[Heimdall] ⚠️ Webhooks no disponibles');
         alert('⚠️ Heimdall: No se pudieron cargar los webhooks.\nAbre el Excel en SharePoint y recarga CAMP.\n\n' + EXCEL_DIRECT_URL);
@@ -524,22 +618,30 @@ initializeWebhooks().then(function(ready) {
     const autoClickBtn = document.createElement('button');
     autoClickBtn.style.cssText = `padding: 8px 15px; cursor: pointer; background: #ff4d4d; color: white; border: 2px solid white; border-radius: 4px; font-weight: bold;`;
     autoClickBtn.textContent = '\u{1F534} AutoClick OFF';
-    autoClickBtn.addEventListener('click', () => {
-        autoClickEnabled = !autoClickEnabled;
+    // v0.9.3.13: single place that sets AutoClick (button toggle + auto-ON at Start)
+    function setAutoClick(enabled) {
+        autoClickEnabled = enabled;
         autoClickBtn.textContent = autoClickEnabled ? '\u{1F7E2} AutoClick ON' : '\u{1F534} AutoClick OFF';
         autoClickBtn.style.background = autoClickEnabled ? '#28a745' : '#ff4d4d';
         addStatusMessage(autoClickEnabled ? 'AutoClick ENABLED' : 'AutoClick DISABLED');
+    }
+    autoClickBtn.addEventListener('click', () => {
+        setAutoClick(!autoClickEnabled);
     });
 
     let debugMode = false;
     const debugBtn = document.createElement('button');
     debugBtn.style.cssText = `padding: 8px 15px; cursor: pointer; background: #6c757d; color: white; border: 2px solid white; border-radius: 4px; font-weight: bold; font-size: 11px;`;
     debugBtn.textContent = '\u{1F41B} Debug OFF';
-    debugBtn.addEventListener('click', () => {
-        debugMode = !debugMode;
+    // v0.9.3.13: single place that sets Debug (button toggle + auto-ON at Start)
+    function setDebugMode(enabled) {
+        debugMode = enabled;
         debugBtn.textContent = debugMode ? '\u{1F41B} Debug ON' : '\u{1F41B} Debug OFF';
         debugBtn.style.background = debugMode ? '#17a2b8' : '#6c757d';
         addStatusMessage(debugMode ? 'Debug mode ON' : 'Debug mode OFF');
+    }
+    debugBtn.addEventListener('click', () => {
+        setDebugMode(!debugMode);
     });
 
     controls.appendChild(startBtn);
@@ -588,6 +690,7 @@ initializeWebhooks().then(function(ready) {
             if (!table) { addStatusMessage('\u{274C} Table not found'); return; }
 
             const idx = findColumnIndexes(table);
+            if (idx.agent === -1 || idx.state === -1 || idx.team === -1) { addStatusMessage('❌ Missing required columns (Agent/State/Team)'); return; }
             const rows = table.querySelectorAll('tbody tr');
             let movedCount = 0;
             let failedCount = 0;
@@ -628,7 +731,7 @@ initializeWebhooks().then(function(ready) {
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
             const alertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MOVEMENTS_WEBHOOK;
 
-            GM_xmlhttpRequest({
+            gmRequest({
                 method: 'POST',
                 url: alertUrl,
                 headers: { 'Content-Type': 'application/json' },
@@ -648,6 +751,7 @@ initializeWebhooks().then(function(ready) {
         if (!table) { addStatusMessage('\u{274C} Table not found'); return; }
 
         const idx = findColumnIndexes(table);
+        if (idx.agent === -1 || idx.state === -1) { addStatusMessage('❌ Missing required columns (Agent/State)'); return; }
         const rows = table.querySelectorAll('tbody tr');
         let targetCell = null;
         let agentFullName = '';
@@ -682,7 +786,7 @@ initializeWebhooks().then(function(ready) {
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
             const alertUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : MOVEMENTS_WEBHOOK;
 
-            GM_xmlhttpRequest({
+            gmRequest({
                 method: 'POST',
                 url: alertUrl,
                 headers: { 'Content-Type': 'application/json' },
@@ -823,6 +927,16 @@ initializeWebhooks().then(function(ready) {
 
       const NEW_HIRE_TMS = [
         'camargis',
+        'claraaqu',
+        'cruizher',
+        'florezhi',
+        'gonzylau',
+        'jcaldani',
+        'llandine',
+        'luribesa',
+        'robayotl',
+        'sandreac',
+        'rdrkat',
         'svilaura'
         // Agregar o quitar TMs según sea necesario
     ];
@@ -893,11 +1007,7 @@ initializeWebhooks().then(function(ready) {
         'ES DART',
         'jorgenll',
         'gsamierc',
-        'velasher',
-        'isblanco',
-        'dirubio',
-        'galveesl',
-        'alvazlu'
+        'velasher'
         // Agregar o quitar TMs según sea necesario
     ];
     const EMAIL_EXTENDED_THRESHOLD = 900; // 15:00 — Solo alerta, no desconecta
@@ -999,7 +1109,8 @@ initializeWebhooks().then(function(ready) {
         totalMovedToAvailable: 0,
         totalFailed: 0,
         totalManagerAlerts: 0,
-        totalTeamAlerts: 0
+        totalTeamAlerts: 0,
+        totalUnconfirmed: 0
     };
 
     // ===== UTILITY FUNCTIONS =====
@@ -1008,6 +1119,7 @@ initializeWebhooks().then(function(ready) {
     function getClassName(el) { return el ? (el.getAttribute('class') || '') : ''; }
 
     function addStatusMessage(message) {
+        lastActivityAt = Date.now();
         const timestamp = new Date().toLocaleTimeString();
         const msg = document.createElement('div');
         msg.textContent = `${timestamp}: ${message}`;
@@ -1027,10 +1139,24 @@ initializeWebhooks().then(function(ready) {
     });
 }
 
+    // v0.9.3.12: after each state change, re-read the row to confirm it. If CAMP does not
+    // refresh the row while paused and the panel shows many 'UNCONFIRMED' while CAMP shows the agent moved, set this to 'off'.
+    //   'warn'   = default: move still counted, but a warning is shown if the row does not confirm it
+    //   'strict' = an unconfirmed move is NOT counted (no team alert, no movement log)
+    //   'off'    = no verification (v0.9.3.11 behavior)
+    const VERIFY_STATE_CHANGE = 'warn';
+
     function parseTimeToSeconds(timeString) {
         if (!timeString) return 0;
-        const parts = timeString.trim().split(':');
-        if (parts.length !== 3) return 0;
+        const trimmed = timeString.trim();
+        const parts = trimmed.split(':');
+        if (parts.length !== 3) {
+            if (trimmed && trimmed !== '-' && trimmed !== '--') {
+                console.warn('[Heimdall] Unreadable duration: "' + trimmed + '"');
+                uiWarn(`⚠️ Unreadable duration(s) in CAMP, e.g. "${trimmed.substring(0, 20)}" (expected HH:MM:SS): treated as 0`, 'duration-format');
+            }
+            return 0;
+        }
         return (parseInt(parts[0]) || 0) * 3600 + (parseInt(parts[1]) || 0) * 60 + (parseInt(parts[2]) || 0);
     }
 
@@ -1047,18 +1173,41 @@ initializeWebhooks().then(function(ready) {
     `], { type: 'application/javascript' });
 
     const workerURL = URL.createObjectURL(workerBlob);
-    const timerWorker = new Worker(workerURL);
+    let timerWorker = new Worker(workerURL);
 
     let delayResolvers = {};
     let delayIdCounter = 0;
 
+    timerWorker.onerror = function(e) { reportBg('❌ Timer worker error: ' + (e && e.message ? e.message : e) + ' (watchdog will recreate it within ~6 min)'); };
+
     timerWorker.onmessage = function(e) {
-        const id = e.data.id;
-        if (delayResolvers[id]) {
-            delayResolvers[id]();
-            delete delayResolvers[id];
+        try {
+            return _timerOnMessage(e);
+        } catch (err) {
+            reportBg('❌ Timer callback error: ' + (err && err.message ? err.message : err), err);
         }
     };
+    const _onWorkerError = timerWorker.onerror;
+    const _onWorkerMessage = timerWorker.onmessage;
+    // v0.9.3.12: used by the watchdog. Pending delays of the dead worker are dropped,
+    // so a stuck cycle never resumes alongside the new one.
+    function recreateTimerWorker() {
+        try { timerWorker.terminate(); } catch (e) { console.warn('[Heimdall] worker terminate failed', e); }
+        delayResolvers = {};
+        timerWorker = new Worker(workerURL);
+        timerWorker.onerror = _onWorkerError;
+        timerWorker.onmessage = _onWorkerMessage;
+    }
+
+    function _timerOnMessage(e) {
+        const id = e.data.id;
+        if (delayResolvers[id]) {
+            const fn = delayResolvers[id];
+            delete delayResolvers[id];
+            const ret = fn();
+            if (ret && typeof ret.catch === 'function') ret.catch(function(err) { reportBg('❌ Async timer callback error: ' + (err && err.message ? err.message : err), err); });
+        }
+    }
 
     // ANTI-THROTTLE delay (NO se throttlea en background tabs):
     function delay(ms) {
@@ -1177,7 +1326,9 @@ initializeWebhooks().then(function(ready) {
 
     // ===== ENHANCED DISCONNECTION LOG WITH SUMMARY =====
 
+    let sessionLogSent = false;
     function sendLogToWebhook() {
+        if (sessionLogSent) return;
         if (disconnectionLog.length === 0 && sessionCounters.totalDisconnected === 0 && sessionCounters.totalManagerAlerts === 0) return;
 
         const summary = `/md\n**CAMP Monitor - Event Log Report**\nSession: ${new Date().toLocaleString()}\n\n` +
@@ -1186,6 +1337,7 @@ initializeWebhooks().then(function(ready) {
             `| Total Disconnected (Offline) | ${sessionCounters.totalDisconnected} |\n` +
             `| Total Moved to Available | ${sessionCounters.totalMovedToAvailable} |\n` +
             `| Total Failed Attempts | ${sessionCounters.totalFailed} |\n` +
+            `| Unconfirmed Moves (verify) | ${sessionCounters.totalUnconfirmed || 0} |\n` +
             `| Manager Alerts Sent | ${sessionCounters.totalManagerAlerts} |\n` +
             `| Team Alerts Sent | ${sessionCounters.totalTeamAlerts} |\n`;
 
@@ -1203,14 +1355,15 @@ ${rows}`;
         }
 
         const content = { Content: `${summary}${detail}` };
+        sessionLogSent = true;
 
         if (typeof GM_xmlhttpRequest !== 'undefined') {
-            GM_xmlhttpRequest({
+            gmRequest({
                 method: 'POST', url: LOG_WEBHOOK_URL,
                 headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify(content),
-                onload: (r) => { debugLog('Log Webhook:', r.status); },
-                onerror: (e) => { console.error('[CAMP Monitor] Log Error:', e); }
+                onload: (r) => { debugLog('Log Webhook:', r.status); if (r.status >= 300) { sessionLogSent = false; reportBg('❌ Session log HTTP ' + r.status); } },
+                onerror: (e) => { sessionLogSent = false; reportBg('❌ Session log not sent (network/timeout)', e); }
             });
         } else {
             navigator.sendBeacon(LOG_WEBHOOK_URL, new Blob([JSON.stringify(content)], { type: 'application/json' }));
@@ -1219,7 +1372,6 @@ ${rows}`;
 
     window.addEventListener('beforeunload', () => { sendLogToWebhook(); });
     window.addEventListener('pagehide', () => { sendLogToWebhook(); });
-    window.addEventListener('unload', () => { sendLogToWebhook(); });
 
 
     // ===== EXTRACT HEADER TEXT =====
@@ -1374,6 +1526,7 @@ ${rows}`;
         const table = findRelevantTable();
         if (!table) return null;
         const idx = findColumnIndexes(table);
+        if (idx.agent === -1 || idx.state === -1) return null;
         const rows = table.querySelectorAll('tbody tr');
         for (const row of rows) {
             const cells = row.querySelectorAll('td');
@@ -1612,6 +1765,26 @@ ${rows}`;
                 }
             }
 
+            if (success && VERIFY_STATE_CHANGE !== 'off') {
+                // v0.9.3.12: a click is not proof. Re-read the row and confirm the new state.
+                let confirmed = false;
+                for (let attempt = 0; attempt < 3 && !confirmed; attempt++) {
+                    await delay(1500);
+                    const cellNow = findAgentStateCell(agentName);
+                    const stateNow = cellNow ? cellNow.textContent.trim() : '';
+                    confirmed = stateNow === targetState || stateNow.indexOf(targetState) === 0;
+                    if (!confirmed) debugLog(`VERIFY STATE ${agentName}: expected ${targetState}, row shows "${stateNow}" (attempt ${attempt + 1})`);
+                }
+                if (!confirmed) {
+                    sessionCounters.totalUnconfirmed = (sessionCounters.totalUnconfirmed || 0) + 1;
+                    if (VERIFY_STATE_CHANGE === 'strict') {
+                        addStatusMessage(`\u{26A0}\u{FE0F} ${agentName}: click sent but row does not show ${targetState} — NOT counted as moved`);
+                        success = false;
+                    } else {
+                        addStatusMessage(`\u{26A0}\u{FE0F} UNCONFIRMED: ${agentName} -> ${targetState} (row not updated yet; check CAMP)`);
+                    }
+                }
+            }
             if (success) {
                 addStatusMessage(`\u{2705} ${agentName} -> ${targetState}`);
             } else {
@@ -1683,8 +1856,65 @@ ${rows}`;
 
     // ===== MAIN MONITORING CYCLE =====
 
-     async function monitoringCycle() {
+
+    // ===== v0.9.3.12: CYCLE WRAPPER + WATCHDOG =====
+    // The wrapper guarantees the next cycle is always scheduled, even if the body throws.
+    // cycleGen discards a stale (hung) cycle if the watchdog had to restart the loop.
+
+    function scheduleNextCycle(ms, gen) {
+        if (gen !== cycleGen) return; // stale cycle: ignore
         if (!isMonitoring) return;
+        if (monitoringTimeout) clearWorkerTimeout(monitoringTimeout);
+        cycleScheduledGen = gen;
+        monitoringTimeout = setWorkerTimeout(monitoringCycle, ms);
+    }
+
+    async function monitoringCycle() {
+        if (!isMonitoring) return;
+        const myGen = ++cycleGen;
+        cycleInProgress = true;
+        lastActivityAt = Date.now();
+
+        // LOW #10: refresh the Excel config every WEBHOOK_CACHE_DURATION (non-blocking).
+        if (Date.now() - lastWebhookAttempt > WEBHOOK_CACHE_DURATION) {
+            lastWebhookAttempt = Date.now();
+            refreshWebhooks().then(function(ok) {
+                if (ok) addStatusMessage('🔄 Webhook config refreshed (' + webhookSource + ')');
+                else uiWarn('⚠️ Webhook config refresh failed, keeping current config');
+            });
+        }
+
+        try {
+            await monitoringCycleBody(myGen);
+        } catch (error) {
+            reportBg('❌ Cycle error: ' + (error && error.message ? error.message : error) + ' — next cycle in 60s', error);
+        } finally {
+            if (myGen === cycleGen) {
+                cycleInProgress = false;
+                if (isMonitoring && cycleScheduledGen !== myGen) {
+                    scheduleNextCycle(60000, myGen);
+                }
+            }
+        }
+    }
+
+    // Watchdog: if the bot is "running" but nothing has happened for 6 minutes
+    // (hung cycle or dead timer worker), restart the loop and say so in the panel.
+    const WATCHDOG_STALL_MS = 6 * 60 * 1000;
+    setInterval(function() {
+        if (!isMonitoring) return;
+        if (Date.now() - lastActivityAt < WATCHDOG_STALL_MS) return;
+        reportBg('🐕 Watchdog: no activity for 6 min (cycle stuck or timer stopped). Restarting monitoring loop...');
+        cycleGen++; // invalidate the stuck cycle
+        try { recreateTimerWorker(); } catch (e) { reportBg('❌ Could not recreate timer worker: ' + (e && e.message ? e.message : e)); }
+        cycleInProgress = false;
+        if (monitoringTimeout) { clearWorkerTimeout(monitoringTimeout); monitoringTimeout = null; }
+        lastActivityAt = Date.now();
+        monitoringCycle();
+    }, 60000);
+
+    async function monitoringCycleBody(myGen) {
+        if (!isMonitoring || myGen !== cycleGen) return;
 
            // ===== KILL SWITCH: revisar desde el ciclo 5 en adelante =====
         cycleCount++;
@@ -1696,6 +1926,7 @@ ${rows}`;
             var remoteStatus = await new Promise(function(resolve) {
                 checkRemoteStatus(function(status) { resolve(status); });
             });
+            if (myGen !== cycleGen) return; // replaced by watchdog while waiting
             if (remoteStatus === 'OFF') {
                 addStatusMessage('🛑 Bot pausado remotamente desde el dashboard.');
                 isMonitoring = false;
@@ -1709,9 +1940,10 @@ ${rows}`;
         }
 
         const sessionOk = await checkAndResumeSession();
+        if (myGen !== cycleGen) return;
         if (!sessionOk) {
             addStatusMessage('\u26A0\uFE0F Session could not be resumed, retrying in 30s...');
-            monitoringTimeout = setWorkerTimeout(monitoringCycle, 30000);
+            scheduleNextCycle(30000, myGen);
             return;
         }
 
@@ -1724,6 +1956,7 @@ ${rows}`;
             const table = findRelevantTable();
             if (table) {
                 const idx = findColumnIndexes(table);
+                if (idx.agent === -1 || idx.state === -1 || idx.team === -1) throw new Error('Missing required columns (Agent/State/Team) in outside-hours check');
                 const rows = table.querySelectorAll('tbody tr');
                 let movedCount = 0;
                 let failedCount = 0;
@@ -1755,6 +1988,7 @@ ${rows}`;
 
                         // Esperar 3.5s entre cada agente
                         await delay(3500);
+                        if (!isMonitoring || myGen !== cycleGen) return;
                     }
                 }
 
@@ -1764,7 +1998,7 @@ ${rows}`;
             }
 
             addStatusMessage('⏳ Next cycle in 60s...');
-            monitoringTimeout = setWorkerTimeout(monitoringCycle, 60000);
+            scheduleNextCycle(60000, myGen);
             return;
         }
 
@@ -1778,7 +2012,7 @@ ${rows}`;
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
             const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : LOG_WEBHOOK_URL;
 
-            GM_xmlhttpRequest({
+            gmRequest({
                 method: 'POST',
                 url: refreshUrl,
                 headers: { 'Content-Type': 'application/json' },
@@ -1789,42 +2023,46 @@ ${rows}`;
                 onerror: () => { addStatusMessage('\u274C Refresh Stopped alert failed'); }
             });
             addStatusMessage('\u23F3 Next cycle in 60s...');
-            monitoringTimeout = setWorkerTimeout(monitoringCycle, 60000);
+            scheduleNextCycle(60000, myGen);
             return;
         }
 
         clickAgentHeader();
 
         await delay(3000);
-        if (!isMonitoring) return;
+        if (!isMonitoring || myGen !== cycleGen) return;
         await checkAndResumeSession();
+        if (!isMonitoring || myGen !== cycleGen) return;
         clickCampPauseButton();
 
         await delay(3000);
-        if (!isMonitoring) return;
+        if (!isMonitoring || myGen !== cycleGen) return;
         await checkAndResumeSession();
+        if (!isMonitoring || myGen !== cycleGen) return;
 
         try {
             await processTableData();
+            if (myGen !== cycleGen) return;
         } catch (error) {
             addStatusMessage(`\u274C Error: ${error.message}`);
         }
 
         await delay(3000);
-        if (!isMonitoring) return;
+        if (!isMonitoring || myGen !== cycleGen) return;
         const playFound = clickCampPlayButton();
         if (!playFound) {
             addStatusMessage('\u26A0\uFE0F Play button not found - bypassing, ending cycle...');
         }
 
-        if (!isMonitoring) return;
+        if (!isMonitoring || myGen !== cycleGen) return;
         addStatusMessage('\u23F3 Next cycle in 60s...');
-        monitoringTimeout = setWorkerTimeout(monitoringCycle, 60000);
+        scheduleNextCycle(60000, myGen);
     }
 
     // ===== PROCESS TABLE DATA =====
 
     async function processTableData() {
+        const _gen = cycleGen;
         const table = findRelevantTable();
         if (!table) { addStatusMessage('\u{26A0}\u{FE0F} Table not found'); return; }
 
@@ -2044,9 +2282,11 @@ ${rows}`;
                 if (i > 0) {
                     addStatusMessage(`\u{23F3} Waiting before next agent (${i + 1}/${stateChangeQueue.length})...`);
                     await delay(3500);
+                    if (_gen !== cycleGen || !isMonitoring) return;
                 }
 
                 await checkAndResumeSession();
+                if (_gen !== cycleGen || !isMonitoring) return;
 
                 const freshCell = findAgentStateCell(item.agentName);
                 if (!freshCell) {
@@ -2184,7 +2424,7 @@ ${rows}`;
 
         for (const [om, omAlerts] of Object.entries(byOM)) {
             const url = MANAGERS_WEBHOOKS[om];
-            if (!url) continue;
+            if (!url) { uiWarn(`⚠️ No manager webhook for OM "${om}": ${omAlerts.length} alert(s) NOT sent`); continue; }
 
             const tableHeader = `**Alertas de Duración AUX** - ${new Date().toLocaleTimeString()} (Bot: ${BOT_OPERATOR})\n\n@All Members\nSe detectó uso elevado de AUX o Missed Contact en los siguientes CSAs. Por favor asegúrense de monitorear los AUXs de cerca y que ningún CSA esté en AUXs no programados.\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
 
@@ -2193,7 +2433,7 @@ ${rows}`;
                 return `| ${agentClean} | ${alert.team} | ${alert.state} | ${alert.duration} | ${alert.threshold} | ${alert.action} |`;
             }).join('\n');
 
-            GM_xmlhttpRequest({
+            gmRequest({
                 method: 'POST', url, headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({ Content: `/md\n${tableHeader}\n${tableRows}` }),
                 onload: (r) => { if (r.status >= 200 && r.status < 300) addStatusMessage(`\u{1F4E4} Manager [${om}] alert sent`); else addStatusMessage(`\u{274C} Manager [${om}] HTTP ${r.status}`); },
@@ -2203,13 +2443,15 @@ ${rows}`;
 
         if (noOM.length > 0) {
             const fallbackUrl = MOVEMENTS_WEBHOOK;
+            uiWarn(`⚠️ Teams without OM mapping: ${[...new Set(noOM.map(a => a.team))].join(', ')}`);
+            if (!fallbackUrl) { uiWarn(`⚠️ MOVEMENTS_WEBHOOK empty: ${noOM.length} unassigned alert(s) NOT sent`); return; }
             const tableHeader = `**Alertas de Duración AUX (Sin OM asignado)** - ${new Date().toLocaleTimeString()}\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
             const tableRows = noOM.map(alert => {
                 const agentClean = alert.agent.replace(/@amazon.*$/i, '').trim();
                 return `| ${agentClean} | ${alert.team} | ${alert.state} | ${alert.duration} | ${alert.threshold} | ${alert.action} |`;
             }).join('\n');
 
-            GM_xmlhttpRequest({
+            gmRequest({
                 method: 'POST', url: fallbackUrl, headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({ Content: `/md\n${tableHeader}\n${tableRows}` }),
                 onload: (r) => { addStatusMessage(r.status < 300 ? '\u{1F4E4} Unassigned alerts sent (fallback)' : `\u{274C} Fallback HTTP ${r.status}`); },
@@ -2246,7 +2488,7 @@ ${rows}`;
 |-------|-------|----------|`;
             const rows = clean.map(a => `| ${a.name} | ${a.state} | ${a.duration} |`).join('\n');
 
-            GM_xmlhttpRequest({
+            gmRequest({
                 method: 'POST', url, headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({ Content: `/md
 ${header}
@@ -2274,7 +2516,7 @@ ${rows}` }),
             if (!url) {
                 url = TEAM_WEBHOOKS[normalizeTeamName(team)];
             }
-            if (!url) continue;
+            if (!url) { uiWarn(`⚠️ No webhook for team "${team}": Missed->Offline alert NOT sent`); continue; }
 
 
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
@@ -2282,7 +2524,7 @@ ${rows}` }),
             const header = `${mentions}\n**Alerta:** Fuiste movido a **Offline** por Missed Contacts. Por favor ve a **Available**, si estás teniendo problemas contacta a tu **Team Manager**.\n\n| Agent | State | Missed Contacts | Duration |\n|-------|-------|--------------------|----------|`;
             const rows = clean.map(a => `| ${a.name} | ${a.state} | ${a.missedContacts} | ${a.duration} |`).join('\n');
 
-            GM_xmlhttpRequest({
+            gmRequest({
                 method: 'POST', url, headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({ Content: `/md\n${header}\n${rows}` }),
                 onload: (r) => {
@@ -2309,13 +2551,13 @@ ${rows}` }),
             if (!url) {
                 url = TEAM_WEBHOOKS[normalizeTeamName(team)];
             }
-            if (!url) continue;
+            if (!url) { uiWarn(`⚠️ No webhook for team "${team}": Missed->Available alert NOT sent`); continue; }
             const clean = teamAlerts.map(a => ({ ...a, name: a.agent.replace(/@amazon.*$/i, '').trim() }));
             const mentions = clean.map(a => `@${a.name}`).join('\n');
             const header = `${mentions}\n**Alerta:** Fuiste movido a **Available** por un Missed Contact. Asegúrate de estar listo para tomar contactos. Si vuelves a fallar, serás movido a **Offline**.\n\n| Agent | State | Duration |\n|-------|-------|----------|`;
             const rows = clean.map(a => `| ${a.name} | ${a.state} | ${a.duration} |`).join('\n');
 
-            GM_xmlhttpRequest({
+            gmRequest({
                 method: 'POST', url, headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({ Content: `/md\n${header}\n${rows}` }),
                 onload: (r) => {
@@ -2337,12 +2579,15 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
     startBtn.addEventListener('click', () => {
         if (!isMonitoring) {
             isMonitoring = true;
-            sessionCounters = { totalDisconnected: 0, totalMovedToAvailable: 0, totalFailed: 0, totalManagerAlerts: 0, totalTeamAlerts: 0 };
+            sessionCounters = { totalDisconnected: 0, totalMovedToAvailable: 0, totalFailed: 0, totalManagerAlerts: 0, totalTeamAlerts: 0, totalUnconfirmed: 0 };
             disconnectionLog = [];
+            sessionLogSent = false;
             cycleCount = 0;
             previousOnContactAlerted = new Set();
             addStatusMessage('\u{25B6}\u{FE0F} Monitoring started');
-            writeHeartbeat('ON');
+            if (!autoClickEnabled) setAutoClick(true); // v0.9.3.13: AutoClick ON by default at Start; the user can turn it OFF afterwards
+            if (!debugMode) setDebugMode(true); // v0.9.3.13: Debug ON by default at Start; the user can turn it OFF afterwards
+            // v0.9.3.12: no heartbeat here; cycle 1 writes it (two parallel CREATEs made duplicate rows)
             monitoringCycle();
             startBtn.disabled = true;
             pauseBtn.disabled = false;
@@ -2362,6 +2607,6 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.11 Developed by yalnunez');
+    addStatusMessage('v0.9.3.14 Developed by yalnunez');
 
 })();
