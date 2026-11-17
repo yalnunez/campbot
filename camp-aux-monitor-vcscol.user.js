@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SDS Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.14
+// @version      0.9.3.15
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh / remote deactivation
@@ -11,6 +11,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_openInTab
 // @connect      hooks.chime.aws
 // @connect      amazon.sharepoint.com
 // @connect      cdn.sheetjs.com
@@ -590,14 +591,49 @@ function checkRemoteStatus(callback) {
         onerror: function() { uiWarn('⚠️ Kill switch unreachable (network/timeout): continuing ON'); callback('ON'); } // si falla la red, no apagar
     });
 }
+// ===== v0.9.3.15: SHAREPOINT WARM-UP (only when the webhook Excel fails) =====
+// Opening the Excel in SharePoint refreshes the SharePoint session; then the config download usually works.
+var _spWarmLastAt = 0, _spWarmRunning = false;
+var SP_WARM_MIN_GAP_MS = 10 * 60 * 1000;   // at most one background tab every 10 minutes
+var SP_WARM_WAIT_MS = 20000;               // time the Excel tab stays open before retrying
+function warmSharePointAndRetry(why) {
+    if (_spWarmRunning || Date.now() - _spWarmLastAt < SP_WARM_MIN_GAP_MS) return Promise.resolve(false);
+    if (typeof GM_openInTab !== 'function') { uiWarn('⚠️ GM_openInTab not available: open the webhooks Excel manually'); return Promise.resolve(false); }
+    _spWarmRunning = true;
+    _spWarmLastAt = Date.now();
+    var tab = null;
+    try { tab = GM_openInTab(EXCEL_DIRECT_URL, { active: false, insert: true, setParent: true }); }
+    catch (e) { _spWarmRunning = false; reportBg('❌ Could not open the webhooks Excel tab: ' + (e && e.message ? e.message : e), e); return Promise.resolve(false); }
+    uiWarn('📂 Webhooks failed (' + why + '): opened the Excel in a background tab, retrying in ' + (SP_WARM_WAIT_MS / 1000) + 's...', 'sp-warm-open');
+    return new Promise(function (resolve) {
+        setTimeout(function () {
+            refreshWebhooks().then(function (ok) {
+                var fromSP = ok && webhookSource === 'SharePoint';
+                if (fromSP) uiWarn('✅ Webhooks loaded from SharePoint after opening the Excel', 'sp-warm-ok');
+                else uiWarn('⚠️ Webhooks still not loading from SharePoint (' + (ok ? 'using cache' : 'none') + '); will retry later', 'sp-warm-fail');
+                resolve(fromSP);
+            }, function () { resolve(false); }).then(function () {
+                try { if (tab && typeof tab.close === 'function') tab.close(); } catch (e) { /* tab already closed by the user */ }
+                _spWarmRunning = false;
+            });
+        }, SP_WARM_WAIT_MS);
+    });
+}
 // ===== CARGAR WEBHOOKS (sin bloquear el UI) =====
 initializeWebhooks().then(function(ready) {
     if (ready) {
         console.log('[Heimdall] ✅ Webhooks listos');
-        if (webhookSource === 'cache') uiWarn('⚠️ Using cached webhooks: SharePoint failed (' + lastWebhookError + '). Open the Excel in SharePoint and reload CAMP to refresh.');
+        if (webhookSource === 'cache') {
+            uiWarn('⚠️ Using cached webhooks: SharePoint failed (' + lastWebhookError + ').');
+            warmSharePointAndRetry('using cache at load');
+        }
     } else {
         console.warn('[Heimdall] ⚠️ Webhooks no disponibles');
-        alert('⚠️ Heimdall: No se pudieron cargar los webhooks.\nAbre el Excel en SharePoint y recarga CAMP.\n\n' + EXCEL_DIRECT_URL);
+        uiWarn('⚠️ Heimdall: webhooks could not be loaded (SharePoint). Opening the Excel in a background tab to retry...');
+        warmSharePointAndRetry('not loaded at load').then(function(ok) {
+            // the warm-up did not fix it: fall back to the original pop-up so the operator acts
+            if (!ok && !webhooksLoaded) alert('⚠️ Heimdall: No se pudieron cargar los webhooks.\nAbre el Excel en SharePoint y recarga CAMP.\n\n' + EXCEL_DIRECT_URL);
+        });
     }
 });
 
@@ -1881,6 +1917,7 @@ ${rows}`;
             refreshWebhooks().then(function(ok) {
                 if (ok) addStatusMessage('🔄 Webhook config refreshed (' + webhookSource + ')');
                 else uiWarn('⚠️ Webhook config refresh failed, keeping current config');
+                if (!ok || webhookSource === 'cache') warmSharePointAndRetry('refresh failed');
             });
         }
 
@@ -2006,8 +2043,47 @@ ${rows}`;
         const refreshStoppedEl = document.querySelector('div.awsui_child_18582_66aol_97 a.awsui_disabled_vjswe_10957_198');
         const refreshStoppedByText = refreshStoppedEl && refreshStoppedEl.textContent.trim().includes('Refresh Stopped');
         const isRefreshStopped = refreshStoppedEl && refreshStoppedByText;
+        // v0.9.3.15: quick fix first. Click CAMP's "Submit" and wait for "Next Refresh in: N seconds".
+        function rsFindSubmit() {
+            const vis = function (e) { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+            const all = Array.from(document.querySelectorAll('a, button')).filter(function (e) { return e.textContent.trim() === 'Submit' && vis(e); });
+            return all.find(function (e) { return e.tagName === 'A' && e.closest('p'); })   // the link in the refresh message
+                || all.find(function (e) { return e.tagName === 'A'; })
+                || all[0] || null;                                                         // fallback: the report's Submit button
+        }
+        function rsStillStopped() {
+            const el = document.querySelector('div.awsui_child_18582_66aol_97 a.awsui_disabled_vjswe_10957_198');
+            if (el && el.textContent.trim().includes('Refresh Stopped')) return true;
+            return Array.from(document.querySelectorAll('a, button')).some(function (x) { return x.textContent.trim() === 'Refresh Stopped'; });
+        }
+        function rsNextRefreshVisible() {
+            return Array.from(document.querySelectorAll('div, span, p')).some(function (e) {
+                const t = e.textContent;
+                if (t.length > 60 || !/^\s*Next Refresh in:?\s*\d+/i.test(t)) return false;
+                const r = e.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+            });
+        }
         if (isRefreshStopped) {
-            addStatusMessage('\uD83D\uDEA8 CAMP Refresh Stopped detected!');
+            addStatusMessage('\uD83D\uDEA8 CAMP Refresh Stopped detected! Trying Submit first...');
+            const rsBtn = rsFindSubmit();
+            let rsFixed = false;
+            if (rsBtn) {
+                simulateClick(rsBtn);
+                for (let i = 0; i < 15 && !rsFixed; i++) {
+                    await delay(1000);
+                    if (!isMonitoring || myGen !== cycleGen) return;
+                    rsFixed = !rsStillStopped() && rsNextRefreshVisible();
+                }
+            } else {
+                addStatusMessage('\u26A0\uFE0F Submit not found on the page');
+            }
+            if (rsFixed) {
+                addStatusMessage('\u2705 Submit worked: "Next Refresh" is back, no alert needed. Next cycle in 5s...');
+                scheduleNextCycle(5000, myGen);
+                return;
+            }
+            addStatusMessage('\u274C Still Refresh Stopped after Submit: sending alert');
 
             const operatorOM = TM_TO_OM[BOT_OPERATOR.trim().toLowerCase()];
             const refreshUrl = operatorOM ? MANAGERS_WEBHOOKS[operatorOM] : LOG_WEBHOOK_URL;
@@ -2017,7 +2093,7 @@ ${rows}`;
                 url: refreshUrl,
                 headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({
-                    Content: `/md\n\u26A0\uFE0F **Problema de Conexión CAMP Detectado** (Bot: ${BOT_OPERATOR})\n\n@All Members\nCAMP está mostrando **"Refresh Stopped"** — la tabla de métricas NO se está actualizando.\n\nPor favor revisen la sesión de CAMP y refresquen si es necesario.\n\nHora: ${new Date().toLocaleTimeString()}`
+                    Content: `/md\n\u26A0\uFE0F **Problema de Conexión CAMP Detectado** (Bot: ${BOT_OPERATOR})\n\n@All Members\nCAMP está mostrando **"Refresh Stopped"** — la tabla de métricas NO se está actualizando. El bot intentó **Submit** y no se recuperó.\n\nPor favor revisen la sesión de CAMP y refresquen si es necesario.\n\nHora: ${new Date().toLocaleTimeString()}`
                 }),
                 onload: (r) => { addStatusMessage(r.status < 300 ? `\uD83D\uDCE4 Refresh Stopped alert sent [${operatorOM || 'fallback'}]` : '\u274C Alert HTTP ' + r.status); },
                 onerror: () => { addStatusMessage('\u274C Refresh Stopped alert failed'); }
@@ -2601,6 +2677,6 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
     });
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.14 Developed by yalnunez');
+    addStatusMessage('v0.9.3.15 Developed by yalnunez');
 
 })();
