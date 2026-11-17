@@ -1007,6 +1007,7 @@ initializeWebhooks().then(function(ready) {
         'ES DART',
         'jorgenll',
         'gsamierc',
+        'galveesl',
         'velasher'
         // Agregar o quitar TMs según sea necesario
     ];
