@@ -2070,7 +2070,7 @@ ${rows}`;
             const rsBtn = rsFindSubmit();
             let rsFixed = false;
             if (rsBtn) {
-                simulateClick(rsBtn);
+                rpClick(rsBtn);
                 for (let i = 0; i < 15 && !rsFixed; i++) {
                     await delay(1000);
                     if (!isMonitoring || myGen !== cycleGen) return;
@@ -2665,9 +2665,15 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
             if (!autoClickEnabled) setAutoClick(true); // v0.9.3.13: AutoClick ON by default at Start; the user can turn it OFF afterwards
             if (!debugMode) setDebugMode(true); // v0.9.3.13: Debug ON by default at Start; the user can turn it OFF afterwards
             // v0.9.3.12: no heartbeat here; cycle 1 writes it (two parallel CREATEs made duplicate rows)
-            monitoringCycle();
             startBtn.disabled = true;
             pauseBtn.disabled = false;
+            // v0.9.3.15: 250 rows before the first cycle, so every agent is on one page
+            const myToken = ++_rpStartToken;
+            rpSet250Rows().catch(function (e) {
+                reportBg('❌ 250 rows error: ' + (e && e.message ? e.message : e), e);
+            }).then(function () {
+                if (isMonitoring && myToken === _rpStartToken) monitoringCycle();
+            });
         }
     });
 
@@ -2682,6 +2688,75 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
             pauseBtn.disabled = true;
         }
     });
+
+    // ===== v0.9.3.15: 250 ROWS AT START (Table Preferences > "250 rows" > Confirm) =====
+    var _rpStartToken = 0;
+    var RP_ROWS_LABEL = '250 rows';
+    function rpSleep(ms) { return delay(ms); }
+    // full pointer sequence (Cloudscape needs it); view must be the real window inside Tampermonkey
+    function rpClick(el) {
+        if (!el) return false;
+        try { el.scrollIntoView({ block: 'center' }); } catch (e) { /* not scrollable */ }
+        const r = el.getBoundingClientRect();
+        const o = { bubbles: true, cancelable: true, view: document.defaultView, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 };
+        let clickSent = false;
+        ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function (t) {
+            try {
+                el.dispatchEvent(t.indexOf('pointer') === 0 ? new PointerEvent(t, o) : new MouseEvent(t, o));
+                if (t === 'click') clickSent = true;
+            } catch (e) { /* sandboxed engine: native click below */ }
+        });
+        if (!clickSent) { try { el.click(); } catch (e) { return false; } }
+        return true;
+    }
+    // the gear of the agents table (the page has one per table)
+    function rpPrefsButton(table) {
+        const btns = Array.from(document.querySelectorAll('button[aria-label="Table Preferences"]'));
+        for (let i = 0; i < btns.length; i++) {
+            let c = btns[i];
+            for (let up = 0; up < 25 && c; up++) {
+                c = c.parentElement;
+                if (!c) break;
+                const th = c.querySelector('table thead');
+                if (th) { if (c.contains(table) || /State/.test(th.textContent)) return btns[i]; break; }
+            }
+        }
+        return null;
+    }
+    function rpPrefsDialog() {
+        return Array.from(document.querySelectorAll('[role="dialog"]')).find(function (d) {
+            const r = d.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && d.querySelector('button[class*="confirm-button"]') && /Table Preferences/i.test(d.textContent);
+        }) || null;
+    }
+    async function rpSet250Rows() {
+        const table = findRelevantTable();
+        if (!table) { addStatusMessage('\u26A0\uFE0F 250 rows: agents table not on screen, skipped'); return false; }
+        const gear = rpPrefsButton(table);
+        if (!gear) { addStatusMessage('\u26A0\uFE0F 250 rows: Table Preferences button not found, skipped'); return false; }
+        addStatusMessage('\u2699\uFE0F Setting ' + RP_ROWS_LABEL + '...');
+        rpClick(gear);
+        let dlg = null;
+        for (let i = 0; i < 8 && !dlg; i++) { await rpSleep(1000); dlg = rpPrefsDialog(); }
+        if (!dlg) { addStatusMessage('\u26A0\uFE0F 250 rows: preferences dialog did not open'); return false; }
+        const label = Array.from(dlg.querySelectorAll('label')).find(function (l) { return l.textContent.trim() === RP_ROWS_LABEL; });
+        if (!label) {
+            const cancel = Array.from(dlg.querySelectorAll('button')).find(function (b) { return b.textContent.trim() === 'Cancel'; });
+            if (cancel) rpClick(cancel);
+            addStatusMessage('\u26A0\uFE0F 250 rows: option not found, dialog closed');
+            return false;
+        }
+        rpClick(label);
+        await rpSleep(1500);
+        const confirmBtn = dlg.querySelector('button[class*="confirm-button"]') ||
+            Array.from(dlg.querySelectorAll('button')).find(function (b) { return b.textContent.trim() === 'Confirm'; });
+        if (!confirmBtn) { addStatusMessage('\u26A0\uFE0F 250 rows: Confirm not found'); return false; }
+        rpClick(confirmBtn);
+        await rpSleep(2000);
+        const t = findRelevantTable();
+        addStatusMessage('\u2705 ' + RP_ROWS_LABEL + ' set (' + (t ? t.querySelectorAll('tbody tr').length : '?') + ' rows on screen)');
+        return true;
+    }
 
     pauseBtn.disabled = true;
     addStatusMessage('v0.9.3.15 Developed by yalnunez');
