@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SDS Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.15
+// @version      0.9.3.16
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh / remote deactivation
@@ -591,7 +591,7 @@ function checkRemoteStatus(callback) {
         onerror: function() { uiWarn('⚠️ Kill switch unreachable (network/timeout): continuing ON'); callback('ON'); } // si falla la red, no apagar
     });
 }
-// ===== v0.9.3.15: SHAREPOINT WARM-UP (only when the webhook Excel fails) =====
+// ===== v0.9.3.16: SHAREPOINT WARM-UP (only when the webhook Excel fails) =====
 // Opening the Excel in SharePoint refreshes the SharePoint session; then the config download usually works.
 var _spWarmLastAt = 0, _spWarmRunning = false;
 var SP_WARM_MIN_GAP_MS = 10 * 60 * 1000;   // at most one background tab every 10 minutes
@@ -720,8 +720,12 @@ initializeWebhooks().then(function(ready) {
     const optOffline = document.createElement('option');
     optOffline.value = 'Offline';
     optOffline.textContent = 'Offline';
+    const optMeeting = document.createElement('option');   // v0.9.3.16: manual change to Meeting
+    optMeeting.value = 'Meeting';
+    optMeeting.textContent = 'Meeting';
     stateSelect.appendChild(optSystem);
     stateSelect.appendChild(optOffline);
+    stateSelect.appendChild(optMeeting);
 
     const manualBtn = document.createElement('button');
     manualBtn.style.cssText = `padding: 8px 15px; cursor: pointer; background: #ff8c00; color: white; border: 2px solid white; border-radius: 4px; font-weight: bold; font-size: 11px;`;
@@ -734,9 +738,12 @@ initializeWebhooks().then(function(ready) {
             return;
         }
 
-        // ===== DISCONNECT ALL AGENTS =====
+        // ===== DISCONNECT ALL / MEETING ALL (operator's own login) =====
         if (login === BOT_OPERATOR.trim().toLowerCase()) {
-            addStatusMessage('\u{1F6A8} Disconnecting ALL agents to Offline...');
+            // v0.9.3.16: Meeting selected -> everyone to Meeting; anything else -> Disconnect All (Offline), as before
+            const massState = targetState === 'Meeting' ? 'Meeting' : 'Offline';
+            const massLabel = massState === 'Meeting' ? 'Meeting All' : 'Disconnect All';
+            addStatusMessage(massState === 'Meeting' ? '\u{1F4C5} Moving ALL agents to Meeting...' : '\u{1F6A8} Disconnecting ALL agents to Offline...');
 
             const table = findRelevantTable();
             if (!table) { addStatusMessage('\u{274C} Table not found'); return; }
@@ -754,18 +761,19 @@ initializeWebhooks().then(function(ready) {
                     const agentLogin = agentText.replace(/@amazon.*$/i, '').trim().toLowerCase();
                     const currentState = cells[idx.state].textContent.trim();
 
-                    // Skip si ya está Offline o si es el operador
-                    if (currentState === 'Offline' || agentLogin === BOT_OPERATOR.trim().toLowerCase()) continue;
+                    // Skip si ya está Offline, si ya está en el estado destino o si es el operador
+                    // (Meeting All no conecta a nadie que esté Offline)
+                    if (currentState === 'Offline' || currentState === massState || agentLogin === BOT_OPERATOR.trim().toLowerCase()) continue;
 
-                    addStatusMessage(`\u{2699}\u{FE0F} Moving ${agentLogin} to Offline...`);
+                    addStatusMessage(`\u{2699}\u{FE0F} Moving ${agentLogin} to ${massState}...`);
                     const targetCell = cells[idx.state];
-                    const success = await openDropdownAndSelectState(targetCell, agentText, 'Offline');
+                    const success = await openDropdownAndSelectState(targetCell, agentText, massState);
 
                     if (success) {
                         movedCount++;
-                        logDisconnection(agentLogin, 'Offline', currentState, 'Disconnect All', BOT_OPERATOR);
-                        sendMovementLog(agentLogin, currentState, 'Offline', 'Disconnect All', BOT_OPERATOR);
-                        addStatusMessage(`\u{2705} ${agentLogin} \u{2192} Offline`);
+                        logDisconnection(agentLogin, massState, currentState, massLabel, BOT_OPERATOR);
+                        sendMovementLog(agentLogin, currentState, massState, massLabel, BOT_OPERATOR);
+                        addStatusMessage(`\u{2705} ${agentLogin} \u{2192} ${massState}`);
                     } else {
                         failedCount++;
                         addStatusMessage(`\u{274C} Failed: ${agentLogin}`);
@@ -776,7 +784,7 @@ initializeWebhooks().then(function(ready) {
                 }
             }
 
-            addStatusMessage(`\u{1F6A8} Disconnect All complete: ${movedCount} moved, ${failedCount} failed`);
+            addStatusMessage(`\u{1F6A8} ${massLabel} complete: ${movedCount} moved, ${failedCount} failed`);
             manualInput.value = '';
 
             // Enviar alerta al OM
@@ -788,10 +796,12 @@ initializeWebhooks().then(function(ready) {
                 url: alertUrl,
                 headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({
-                    Content: `/md\n\u{1F6A8} **Disconnect All Ejecutado**\n\n**${BOT_OPERATOR}** desconectó a **${movedCount} agentes** a Offline.\nFallidos: ${failedCount}\n\nHora: ${new Date().toLocaleTimeString()}`
+                    Content: massState === 'Meeting'
+                        ? `/md\n\u{1F4C5} **Meeting All Ejecutado**\n\n**${BOT_OPERATOR}** movió a **${movedCount} agentes** a Meeting.\nFallidos: ${failedCount}\n\nHora: ${new Date().toLocaleTimeString()}`
+                        : `/md\n\u{1F6A8} **Disconnect All Ejecutado**\n\n**${BOT_OPERATOR}** desconectó a **${movedCount} agentes** a Offline.\nFallidos: ${failedCount}\n\nHora: ${new Date().toLocaleTimeString()}`
                 }),
-                onload: (r) => { addStatusMessage(r.status < 300 ? `\u{1F4E4} Disconnect All alert sent` : `\u{274C} Alert HTTP ${r.status}`); },
-                onerror: () => { addStatusMessage('\u{274C} Disconnect All alert failed'); }
+                onload: (r) => { addStatusMessage(r.status < 300 ? `\u{1F4E4} ${massLabel} alert sent` : `\u{274C} Alert HTTP ${r.status}`); },
+                onerror: () => { addStatusMessage(`\u{274C} ${massLabel} alert failed`); }
             });
             return;
         }
@@ -2043,7 +2053,7 @@ ${rows}`;
         const refreshStoppedEl = document.querySelector('div.awsui_child_18582_66aol_97 a.awsui_disabled_vjswe_10957_198');
         const refreshStoppedByText = refreshStoppedEl && refreshStoppedEl.textContent.trim().includes('Refresh Stopped');
         const isRefreshStopped = refreshStoppedEl && refreshStoppedByText;
-        // v0.9.3.15: quick fix first. Click CAMP's "Submit" and wait for "Next Refresh in: N seconds".
+        // v0.9.3.16: quick fix first. Click CAMP's "Submit" and wait for "Next Refresh in: N seconds".
         function rsFindSubmit() {
             const vis = function (e) { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
             const all = Array.from(document.querySelectorAll('a, button')).filter(function (e) { return e.textContent.trim() === 'Submit' && vis(e); });
@@ -2093,7 +2103,7 @@ ${rows}`;
                 url: refreshUrl,
                 headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({
-                    Content: `/md\n\u26A0\uFE0F **Problema de Conexión CAMP Detectado** (Bot: ${BOT_OPERATOR})\n\n@All Members\nCAMP está mostrando **"Refresh Stopped"** — la tabla de métricas NO se está actualizando. El bot intentó **Submit** y no se recuperó.\n\nPor favor revisen la sesión de CAMP y refresquen si es necesario.\n\nHora: ${new Date().toLocaleTimeString()}`
+                    Content: `/md\n\u26A0\uFE0F **Problema de Conexión CAMP Detectado** (Bot: ${BOT_OPERATOR})\n\n${buildMentions([])}\nCAMP está mostrando **"Refresh Stopped"** — la tabla de métricas NO se está actualizando. El bot intentó **Submit** y no se recuperó.\n\nPor favor revisen la sesión de CAMP y refresquen si es necesario.\n\nHora: ${new Date().toLocaleTimeString()}`
                 }),
                 onload: (r) => { addStatusMessage(r.status < 300 ? `\uD83D\uDCE4 Refresh Stopped alert sent [${operatorOM || 'fallback'}]` : '\u274C Alert HTTP ' + r.status); },
                 onerror: () => { addStatusMessage('\u274C Refresh Stopped alert failed'); }
@@ -2472,6 +2482,20 @@ ${rows}`;
     }
 
 
+    // ===== v0.9.3.16: CHIME MENTIONS (@operator @team, no longer All Members) =====
+    function mentionLogin(raw) {
+        const v = String(raw || '').trim().toLowerCase().replace(/@amazon.*$/i, '');
+        return /^[a-z][a-z0-9]{1,29}$/.test(v) ? v : '';
+    }
+    // operator first, then each team (TM login) once; teams with a non-login name are normalized (e.g. "ES DART" -> velasher)
+    function buildMentions(teams) {
+        const out = [];
+        const add = function (l) { if (l && out.indexOf(l) === -1) out.push(l); };
+        add(mentionLogin(BOT_OPERATOR));
+        (teams || []).forEach(function (t) { add(mentionLogin(t) || mentionLogin(normalizeTeamName(t))); });
+        return out.map(function (l) { return '@' + l; }).join(' ');
+    }
+
     // ===== WEBHOOK ALERTS =====
 
     function sendManagersAlert(alerts) {
@@ -2496,7 +2520,8 @@ ${rows}`;
             const url = MANAGERS_WEBHOOKS[om];
             if (!url) { uiWarn(`⚠️ No manager webhook for OM "${om}": ${omAlerts.length} alert(s) NOT sent`); continue; }
 
-            const tableHeader = `**Alertas de Duración AUX** - ${new Date().toLocaleTimeString()} (Bot: ${BOT_OPERATOR})\n\n@All Members\nSe detectó uso elevado de AUX o Missed Contact en los siguientes CSAs. Por favor asegúrense de monitorear los AUXs de cerca y que ningún CSA esté en AUXs no programados.\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
+            const mentions = buildMentions(omAlerts.map(a => a.team));
+            const tableHeader = `**Alertas de Duración AUX** - ${new Date().toLocaleTimeString()} (Bot: ${BOT_OPERATOR})\n\n${mentions}\nSe detectó uso elevado de AUX o Missed Contact en los siguientes CSAs. Por favor asegúrense de monitorear los AUXs de cerca y que ningún CSA esté en AUXs no programados.\n\n| Agent | Team | State | Duration | Threshold | Action |\n|-------|------|-------|----------|-----------|--------|`;
 
             const tableRows = omAlerts.map(alert => {
                 const agentClean = alert.agent.replace(/@amazon.*$/i, '').trim();
@@ -2660,7 +2685,7 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
             // v0.9.3.12: no heartbeat here; cycle 1 writes it (two parallel CREATEs made duplicate rows)
             startBtn.disabled = true;
             pauseBtn.disabled = false;
-            // v0.9.3.15: 250 rows before the first cycle, so every agent is on one page
+            // v0.9.3.16: 250 rows before the first cycle, so every agent is on one page
             const myToken = ++_rpStartToken;
             rpSet250Rows().catch(function (e) {
                 reportBg('❌ 250 rows error: ' + (e && e.message ? e.message : e), e);
@@ -2682,7 +2707,7 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
         }
     });
 
-    // ===== v0.9.3.15: 250 ROWS AT START (Table Preferences > "250 rows" > Confirm) =====
+    // ===== v0.9.3.16: 250 ROWS AT START (Table Preferences > "250 rows" > Confirm) =====
     var _rpStartToken = 0;
     var RP_ROWS_LABEL = '250 rows';
     function rpSleep(ms) { return delay(ms); }
@@ -2752,6 +2777,6 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
     }
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.15 Developed by yalnunez');
+    addStatusMessage('v0.9.3.16 Developed by yalnunez');
 
 })();
