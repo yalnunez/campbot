@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SDS Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.16
+// @version      0.9.3.17
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh / remote deactivation
@@ -16,6 +16,7 @@
 // @connect      amazon.sharepoint.com
 // @connect      cdn.sheetjs.com
 
+// @noframes
 // ==/UserScript==
 
 (function () {
@@ -83,13 +84,7 @@
         }
     }
 
-let BOT_OPERATOR = '';
-while (!BOT_OPERATOR) {
-    BOT_OPERATOR = (prompt('Enter your login to start the bot:') || '').trim().toLowerCase();
-    if (!BOT_OPERATOR) {
-        alert('You must enter your login to use the bot.');
-    }
-}
+let BOT_OPERATOR = '';   // v0.9.3.17: asked by hdAskOperator() once the Excel is loaded (must be a listed Team Member)
 
 
 // ===== SHAREPOINT CONFIG =====
@@ -107,6 +102,7 @@ var TM_TO_OM = {};
 var TEAM_WEBHOOKS = {};
 var MOVEMENTS_WEBHOOK = '';
 var LOG_WEBHOOK_URL = '';
+var TEAM_MEMBERS = [];   // v0.9.3.17: logins of the TEAM WEBHOOKS section (allowed bot operators)
 var webhooksLoaded = false;
 var lastWebhookLoad = 0;
 var WEBHOOK_CACHE_DURATION = 30 * 60 * 1000;
@@ -168,6 +164,7 @@ function downloadAndParseExcel(resolve, reject) {
                     var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
                     parseWebhookData(rows);
+                    hdLoadCfgB(workbook);
                     webhooksLoaded = true;
                     lastWebhookLoad = Date.now();
                     console.log('[Heimdall] ✅ Webhooks cargados desde SharePoint');
@@ -198,7 +195,8 @@ function downloadAndParseExcel(resolve, reject) {
 
     // ===== PARSER (igual que antes) =====
     function parseWebhookData(rows) {
-        var _prev = { m: MANAGERS_WEBHOOKS, t: TM_TO_OM, w: TEAM_WEBHOOKS, mv: MOVEMENTS_WEBHOOK, lg: LOG_WEBHOOK_URL, p: PWD_AGENTS, a: ACCOMMODATION_AGENTS };
+        var _prev = { m: MANAGERS_WEBHOOKS, t: TM_TO_OM, w: TEAM_WEBHOOKS, mv: MOVEMENTS_WEBHOOK, lg: LOG_WEBHOOK_URL, p: PWD_AGENTS, a: ACCOMMODATION_AGENTS, tmm: TEAM_MEMBERS };
+        TEAM_MEMBERS = [];
         MANAGERS_WEBHOOKS = {};
         TM_TO_OM = {};
         TEAM_WEBHOOKS = {};
@@ -243,6 +241,7 @@ function downloadAndParseExcel(resolve, reject) {
                     // TM TO OM MAPPING section (if still present) keeps priority.
                     if (cellA) {
                         var _tmKey = cellA.toLowerCase();
+                        if (TEAM_MEMBERS.indexOf(_tmKey) < 0) TEAM_MEMBERS.push(_tmKey);   // v0.9.3.17: allowed operator
                         if (cellB && !TM_TO_OM[_tmKey]) {
                             TM_TO_OM[_tmKey] = cellB.toLowerCase();
                         }
@@ -271,7 +270,7 @@ function downloadAndParseExcel(resolve, reject) {
         // v0.9.3.12: never accept (or cache) an empty/broken config
         var _nM = Object.keys(MANAGERS_WEBHOOKS).length, _nT = Object.keys(TM_TO_OM).length, _nW = Object.keys(TEAM_WEBHOOKS).length;
         if (_nM === 0 || _nT === 0 || _nW === 0) {
-            MANAGERS_WEBHOOKS = _prev.m; TM_TO_OM = _prev.t; TEAM_WEBHOOKS = _prev.w; MOVEMENTS_WEBHOOK = _prev.mv; LOG_WEBHOOK_URL = _prev.lg; PWD_AGENTS = _prev.p; ACCOMMODATION_AGENTS = _prev.a;
+            MANAGERS_WEBHOOKS = _prev.m; TM_TO_OM = _prev.t; TEAM_WEBHOOKS = _prev.w; MOVEMENTS_WEBHOOK = _prev.mv; LOG_WEBHOOK_URL = _prev.lg; PWD_AGENTS = _prev.p; ACCOMMODATION_AGENTS = _prev.a; TEAM_MEMBERS = _prev.tmm;
             throw new Error('INVALID_CONFIG: Managers=' + _nM + ', TM->OM=' + _nT + ', Team webhooks=' + _nW + ' (check sheet name and section headers)');
         }
         if (!MOVEMENTS_WEBHOOK) console.warn('[Heimdall] ⚠️ MOVEMENTS_WEBHOOK empty: alerts for teams without OM will not be sent');
@@ -279,6 +278,7 @@ function downloadAndParseExcel(resolve, reject) {
         GM_setValue('cached_MANAGERS_WEBHOOKS', JSON.stringify(MANAGERS_WEBHOOKS));
         GM_setValue('cached_TM_TO_OM', JSON.stringify(TM_TO_OM));
         GM_setValue('cached_TEAM_WEBHOOKS', JSON.stringify(TEAM_WEBHOOKS));
+        GM_setValue('cached_TEAM_MEMBERS', JSON.stringify(TEAM_MEMBERS));   // v0.9.3.17
         GM_setValue('cached_MOVEMENTS_WEBHOOK', MOVEMENTS_WEBHOOK);
         GM_setValue('cached_LOG_WEBHOOK_URL', LOG_WEBHOOK_URL);
         GM_setValue('cached_PWD_AGENTS', JSON.stringify(PWD_AGENTS));
@@ -308,6 +308,8 @@ function downloadAndParseExcel(resolve, reject) {
             MOVEMENTS_WEBHOOK = GM_getValue('cached_MOVEMENTS_WEBHOOK', '');
             LOG_WEBHOOK_URL = GM_getValue('cached_LOG_WEBHOOK_URL', '');
             PWD_AGENTS = pwd; ACCOMMODATION_AGENTS = acc;
+            try { TEAM_MEMBERS = JSON.parse(GM_getValue('cached_TEAM_MEMBERS', '[]')); } catch (e2) { TEAM_MEMBERS = []; }   // v0.9.3.17
+            if (!TEAM_MEMBERS.length) TEAM_MEMBERS = Object.keys(tm).concat(Object.keys(tw)).filter(function (x, i, arr) { return arr.indexOf(x) === i; });
             webhooksLoaded = true;
             console.log('[Heimdall] 📦 Webhooks cargados desde cache local');
             console.log('[Heimdall] 📦 PWD_AGENTS desde cache: ' + PWD_AGENTS.length);
@@ -465,6 +467,69 @@ function writeMovementToExcel(agentLogin, fromState, toState, action, team, dura
 }
 
 // ===== HEARTBEAT DE ESTADO (una fila por operador, se actualiza) =====
+// v0.9.3.17: bot version in column "BotVersion" (single line of text). Missing column -> retried without it.
+var HB_VERSION_FIELD = 'BotVersion';      // column display name
+var _hbVerProp = null;                     // real REST property name (resolved from the list fields)
+var _hbVerResolvedAt = 0;
+var _hbNoVersionField = false, _hbNoVersionAt = 0;
+var HB_VER_RETRY_MS = 10 * 60 * 1000;      // v2: retry the version field every 10 min (column may be created while the bot runs)
+function hbBotVersion() { try { return String(GM_info.script.version || ''); } catch (e) { return ''; } }
+// v2: look up the column by display name OR internal name -> EntityPropertyName (handles renamed columns like field_1)
+function hbResolveVersionProp(done) {
+    if (_hbVerProp && Date.now() - _hbVerResolvedAt < HB_VER_RETRY_MS) { done(_hbVerProp); return; }
+    var url = SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST + "')/fields?$select=Title,InternalName,EntityPropertyName&$filter=Hidden eq false";
+    gmRequest({
+        method: 'GET', url: url, headers: { 'Accept': 'application/json;odata=verbose' },
+        onload: function (r) {
+            var prop = null;
+            try {
+                if (r.status === 200) {
+                    var want = HB_VERSION_FIELD.toLowerCase();
+                    (JSON.parse(r.responseText).d.results || []).forEach(function (f) {
+                        if (prop) return;
+                        if (String(f.Title || '').trim().toLowerCase() === want || String(f.InternalName || '').toLowerCase() === want)
+                            prop = f.EntityPropertyName || f.InternalName;
+                    });
+                }
+            } catch (e) { console.error('[Heimdall] BotVersion field lookup parse error:', e); }
+            _hbVerProp = prop; _hbVerResolvedAt = Date.now();
+            if (prop) console.log('[Heimdall] BotVersion column -> property "' + prop + '"');
+            done(prop);
+        },
+        onerror: function () { done(_hbVerProp); }
+    });
+}
+function hbSend(opts, buildPayload, label) {
+    if (_hbNoVersionField && Date.now() - _hbNoVersionAt >= HB_VER_RETRY_MS) _hbNoVersionField = false;
+    var userOnload = opts.onload;
+    function sendWithout() {
+        opts.data = buildPayload(null);
+        opts.onload = userOnload;
+        gmRequest(opts);
+    }
+    if (_hbNoVersionField) { sendWithout(); return; }
+    hbResolveVersionProp(function (prop) {
+        if (!prop) {
+            _hbNoVersionField = true; _hbNoVersionAt = Date.now();
+            uiWarn('⚠️ Heartbeat: column "' + HB_VERSION_FIELD + '" not found in ' + BOT_STATUS_LIST + ', version not written (add the column)', 'hb-nover');
+            sendWithout();
+            return;
+        }
+        opts.data = buildPayload(prop);
+        opts.onload = function (r) {
+            if (r.status === 400) {
+                _hbNoVersionField = true; _hbNoVersionAt = Date.now(); _hbVerProp = null;
+                var body = r.responseText ? String(r.responseText).substring(0, 200) : '';
+                console.warn('[Heimdall] Heartbeat ' + label + ' with "' + prop + '" -> 400: ' + body);
+                uiWarn('⚠️ Heartbeat: SharePoint rejected column "' + prop + '" (HTTP 400), version not written. Retrying in 10 min', 'hb-nover');
+                sendWithout();
+                return;
+            }
+            userOnload(r);
+        };
+        gmRequest(opts);
+    });
+}
 function writeHeartbeat(status) {
     gmRequest({
         method: 'POST',
@@ -513,17 +578,21 @@ function writeHeartbeat(status) {
                             return;
                         }
 
-                        var payload = JSON.stringify({
-                            '__metadata': { 'type': 'SP.Data.Heimdall_x005f_Bot_x005f_StatusListItem' },
-                            'Title': BOT_OPERATOR,
-                            'Status': status,
-                            'LastSeen': ts,
-                            'Vertical': BOT_VERTICAL
-                        });
+                        var buildPayload = function (withVersion) {
+                            var item = {
+                                '__metadata': { 'type': 'SP.Data.Heimdall_x005f_Bot_x005f_StatusListItem' },
+                                'Title': BOT_OPERATOR,
+                                'Status': status,
+                                'LastSeen': ts,
+                                'Vertical': BOT_VERTICAL
+                            };
+                            if (withVersion) item[withVersion] = hbBotVersion(); // withVersion = REST property name or null
+                            return JSON.stringify(item);
+                        };
 
                         if (existingId) {
                             // Ya existe → ACTUALIZAR esa fila (MERGE)
-                            gmRequest({
+                            hbSend({
                                 method: 'POST',
                                 url: SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST + "')/items(" + existingId + ")",
                                 headers: {
@@ -533,16 +602,15 @@ function writeHeartbeat(status) {
                                     'X-HTTP-Method': 'MERGE',
                                     'IF-MATCH': '*'
                                 },
-                                data: payload,
                                 onload: function(r) {
                                     if (r.status >= 200 && r.status < 300) debugLog('💓 Heartbeat MERGE: ' + status + ' (' + BOT_VERTICAL + ')');
                                     else reportBg('❌ Heartbeat MERGE HTTP ' + r.status);
                                 },
                                 onerror: function() { reportBg('❌ Heartbeat MERGE network error'); }
-                            });
+                            }, buildPayload, 'MERGE');
                         } else {
                             // No existe → CREAR fila nueva
-                            gmRequest({
+                            hbSend({
                                 method: 'POST',
                                 url: SP_YALNUNEZ + "/_api/web/lists/getbytitle('" + BOT_STATUS_LIST + "')/items",
                                 headers: {
@@ -550,13 +618,12 @@ function writeHeartbeat(status) {
                                     'Accept': 'application/json;odata=verbose',
                                     'X-RequestDigest': digest
                                 },
-                                data: payload,
                                 onload: function(r) {
                                     if (r.status >= 200 && r.status < 300) debugLog('💓 Heartbeat CREATE: ' + status + ' (' + BOT_VERTICAL + ')');
                                     else reportBg('❌ Heartbeat CREATE HTTP ' + r.status, r.responseText ? r.responseText.substring(0, 300) : '');
                                 },
                                 onerror: function() { reportBg('❌ Heartbeat CREATE network error'); }
-                            });
+                            }, buildPayload, 'CREATE');
                         }
                     },
                     onerror: function() { reportBg('❌ Heartbeat find network error'); }
@@ -591,7 +658,7 @@ function checkRemoteStatus(callback) {
         onerror: function() { uiWarn('⚠️ Kill switch unreachable (network/timeout): continuing ON'); callback('ON'); } // si falla la red, no apagar
     });
 }
-// ===== v0.9.3.16: SHAREPOINT WARM-UP (only when the webhook Excel fails) =====
+// ===== v0.9.3.17: SHAREPOINT WARM-UP (only when the webhook Excel fails) =====
 // Opening the Excel in SharePoint refreshes the SharePoint session; then the config download usually works.
 var _spWarmLastAt = 0, _spWarmRunning = false;
 var SP_WARM_MIN_GAP_MS = 10 * 60 * 1000;   // at most one background tab every 10 minutes
@@ -623,6 +690,7 @@ function warmSharePointAndRetry(why) {
 initializeWebhooks().then(function(ready) {
     if (ready) {
         console.log('[Heimdall] ✅ Webhooks listos');
+        setTimeout(function () { hdAskOperator(); }, 0);   // v0.9.3.17: login prompt only once the Team Member list is known
         if (webhookSource === 'cache') {
             uiWarn('⚠️ Using cached webhooks: SharePoint failed (' + lastWebhookError + ').');
             warmSharePointAndRetry('using cache at load');
@@ -720,7 +788,7 @@ initializeWebhooks().then(function(ready) {
     const optOffline = document.createElement('option');
     optOffline.value = 'Offline';
     optOffline.textContent = 'Offline';
-    const optMeeting = document.createElement('option');   // v0.9.3.16: manual change to Meeting
+    const optMeeting = document.createElement('option');   // v0.9.3.17: manual change to Meeting
     optMeeting.value = 'Meeting';
     optMeeting.textContent = 'Meeting';
     stateSelect.appendChild(optSystem);
@@ -740,7 +808,7 @@ initializeWebhooks().then(function(ready) {
 
         // ===== DISCONNECT ALL / MEETING ALL (operator's own login) =====
         if (login === BOT_OPERATOR.trim().toLowerCase()) {
-            // v0.9.3.16: Meeting selected -> everyone to Meeting; anything else -> Disconnect All (Offline), as before
+            // v0.9.3.17: Meeting selected -> everyone to Meeting; anything else -> Disconnect All (Offline), as before
             const massState = targetState === 'Meeting' ? 'Meeting' : 'Offline';
             const massLabel = massState === 'Meeting' ? 'Meeting All' : 'Disconnect All';
             addStatusMessage(massState === 'Meeting' ? '\u{1F4C5} Moving ALL agents to Meeting...' : '\u{1F6A8} Disconnecting ALL agents to Offline...');
@@ -888,20 +956,20 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const AUX_THRESHOLDS = {
-        'Available': 1200,//0:20:00 — Alert only (no disconnect)
-        'Meeting': 10800,// 3:00:00 — Alert only (no disconnect)
-        'Training': 10800,// 3:00:00 — Alert only (no disconnect)
-        'Project': 10800,// 3:00:00 — Alert only (no disconnect)
-        'Missed': 60,// 0:01:00 — Disconnect to Offline (2+) or Available (<2)
-        'Email': 90,// 0:01:30 — Disconnect to Offline
-        'Break': 915,// 0:15:15 — Disconnect to Offline
-        'Break2': 915,// 0:15:15 — Disconnect to Offline
-        'Break3': 0,// 0:00:00 — Immediate disconnect (any duration)
-        'Personal': 375,// 0:06:15 — Disconnect to Offline
-        'Lunch': 3615,// 1:00:15 — Disconnect to Offline
-        'System': 600,// 0:10:00 — Disconnect to Offline
-        'On Contact': 1800,// 0:30:00 — Alert only (no disconnect)
-        'UpcomingOffline': 60// 0:01:00 — Disconnect to Offline
+        'Available': 1200,// 0:20:00 - Alert only (no disconnect)
+        'Meeting': 10800,// 3:00:00 - Alert only (no disconnect)
+        'Training': 10800,// 3:00:00 - Alert only (no disconnect)
+        'Project': 10800,// 3:00:00 - Alert only (no disconnect)
+        'Missed': 60,// 0:01:00 - Disconnect to Offline
+        'Email': 90,// 0:01:30 - Disconnect to Offline
+        'Break': 915,// 0:15:15 - Disconnect to Offline
+        'Break2': 915,// 0:15:15 - Disconnect to Offline
+        'Break3': 0,// 0:00:00 - Disconnect to Offline
+        'Personal': 375,// 0:06:15 - Disconnect to Offline
+        'Lunch': 3615,// 1:00:15 - Disconnect to Offline
+        'System': 600,// 0:10:00 - Disconnect to Offline
+        'On Contact': 1800,// 0:30:00 - Alert only (no disconnect)
+        'UpcomingOffline': 60// 0:01:00 - Disconnect to Offline
     };
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           OPERATION HOURS — Auto-Disconnect Outside Hours    ║
@@ -912,11 +980,11 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     const OPERATION_HOURS = {
-        startHour: 1,// 01:00
+        startHour: 1,
         startMinute: 0,
-        endHour: 23,// 23:00
+        endHour: 23,
         endMinute: 0,
-        graceMinutes: 30// 30 min gracia → activo de 00:30 a 23:30
+        graceMinutes: 30
     };
 
    function isOutsideOperationHours() {
@@ -947,7 +1015,7 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     var PWD_AGENTS = [];
-    const PWD_BREAK_THRESHOLD = 1215; // 20:15
+    const PWD_BREAK_THRESHOLD = 1215; // 0:20:15
 
 
     function getBreakThreshold(agentName, state) {
@@ -976,10 +1044,10 @@ initializeWebhooks().then(function(ready) {
     // ╚══════════════════════════════════════════════════════════════╝
 
     var ACCOMMODATION_AGENTS = [];
-    const ACCOMMODATION_BREAK1_THRESHOLD = 2115;// 35:15
-    const ACCOMMODATION_BREAK2_THRESHOLD = 1815;// 30:15
-    const ACCOMMODATION_BREAK3_THRESHOLD = 2115;// 35:15
-    const ACCOMMODATION_PERSONAL_THRESHOLD = 2175;// 36:15
+    const ACCOMMODATION_BREAK1_THRESHOLD = 2115; // 0:35:15
+    const ACCOMMODATION_BREAK2_THRESHOLD = 1815; // 0:30:15
+    const ACCOMMODATION_BREAK3_THRESHOLD = 2115; // 0:35:15
+    const ACCOMMODATION_PERSONAL_THRESHOLD = 2175; // 0:36:15
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           NEW HIRE AGENTS — Extended On Contact              ║
@@ -987,30 +1055,29 @@ initializeWebhooks().then(function(ready) {
     // ║  of the standard 30:00 (1800s). Alert only, no disconnect.  ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-      const NEW_HIRE_TMS = [
-        'camargis',
-        'claraaqu',
-        'cruizher',
-        'florezhi',
-        'gonzylau',
-        'jcaldani',
-        'llandine',
-        'luribesa',
-        'robayotl',
-        'sandreac',
-        'saaimara',
-        'augucasx',
-        'rdrkat',
-        'svilaura',
-        'molatati',
-        'nitoroos',
-        'rovandre',
-        'tojasona',
-        'alvstevc',
-        'villjeis'
-        // Agregar o quitar TMs según sea necesario
-    ];
-    const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 60:00
+      const NEW_HIRE_TMS = [   // editable list (not in the Excel): add or remove here
+          'camargis',
+          'claraaqu',
+          'cruizher',
+          'florezhi',
+          'gonzylau',
+          'jcaldani',
+          'llandine',
+          'luribesa',
+          'robayotl',
+          'sandreac',
+          'saaimara',
+          'augucasx',
+          'rdrkat',
+          'svilaura',
+          'molatati',
+          'nitoroos',
+          'rovandre',
+          'tojasona',
+          'alvstevc',
+          'villjeis'
+      ];
+    const NEW_HIRE_ON_CONTACT_THRESHOLD = 3600; // 1:00:00
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           EMAIL EXTENDED TMs — No Disconnect on Email        ║
@@ -1020,64 +1087,63 @@ initializeWebhooks().then(function(ready) {
     // ║  El bot lee la columna "Team" para determinar si aplica.    ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-    const EMAIL_EXTENDED_TMS = [
-'team elsbolan',
-'team jugarzo',
-'team jumurcia',
-'team lauracrc',
-'team leipaula',
-'team romecin',
-'team valgarzo',
-'team brayandv',
-'kelyrami',
-'gulaurac',
-'olarta',
-'dabroche',
-'anuarado',
-'ilauraca',
-'josealso',
-'gsarmiec',
-'rivediaj',
-'dianapam',
-'ranbello',
-'juborjav',
-'acordead',
-'ynicolca',
-'juamartt',
-'lopeglui',
-'legnayoh',
-'rendonbe',
-'didiazva',
-'fqvn',
-'jonleoj',
-'cxfriasa',
-'araujh',
-'sebasus',
-'storresg',
-'aradan',
-'jdiazhur',
-'scstano',
-'jorgmune',
-'alopzg',
-'ramariaj',
-'perginna',
-'adouglyg',
-'glafonso',
-'mosquchr',
-'chrixp',
-'fonjairo',
-'lunarva',
-'javdiazp',
-'catanolc',
-'sfrancn',
-'jenargue',
-'jeshin',
-'narancri',
-'jorgenll',
-'velasher'
-        // Agregar o quitar TMs según sea necesario
+    const EMAIL_EXTENDED_TMS = [   // editable list (not in the Excel): add or remove here
+        'team elsbolan',
+        'team jugarzo',
+        'team jumurcia',
+        'team lauracrc',
+        'team leipaula',
+        'team romecin',
+        'team valgarzo',
+        'team brayandv',
+        'kelyrami',
+        'gulaurac',
+        'olarta',
+        'dabroche',
+        'anuarado',
+        'ilauraca',
+        'josealso',
+        'gsarmiec',
+        'rivediaj',
+        'dianapam',
+        'ranbello',
+        'juborjav',
+        'acordead',
+        'ynicolca',
+        'juamartt',
+        'lopeglui',
+        'legnayoh',
+        'rendonbe',
+        'didiazva',
+        'fqvn',
+        'jonleoj',
+        'cxfriasa',
+        'araujh',
+        'sebasus',
+        'storresg',
+        'aradan',
+        'jdiazhur',
+        'scstano',
+        'jorgmune',
+        'alopzg',
+        'ramariaj',
+        'perginna',
+        'adouglyg',
+        'glafonso',
+        'mosquchr',
+        'chrixp',
+        'fonjairo',
+        'lunarva',
+        'javdiazp',
+        'catanolc',
+        'sfrancn',
+        'jenargue',
+        'jeshin',
+        'narancri',
+        'jorgenll',
+        'velasher'
     ];
-    const EMAIL_EXTENDED_THRESHOLD = 900; // 15:00 — Solo alerta, no desconecta
+    const EMAIL_EXTENDED_THRESHOLD = 900; // 0:15:00
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║   UPCOMING OFFLINE EXTENDED TMs — No Disconnect, Alert Only  ║
@@ -1086,7 +1152,7 @@ initializeWebhooks().then(function(ready) {
     // ║  los 10 minutos (600s) en UpcomingOffline.                  ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-    const UPCOMING_OFFLINE_EXTENDED_TMS = [
+    const UPCOMING_OFFLINE_EXTENDED_TMS = [   // editable list (not in the Excel): add or remove here
         'kelyrami',
         'gulaurac',
         'olarta',
@@ -1107,9 +1173,8 @@ initializeWebhooks().then(function(ready) {
         'rendonbe',
         'didiazva',
         'fqvn'
-        // Agregar o quitar TMs según sea necesario
     ];
-    const UPCOMING_OFFLINE_EXTENDED_THRESHOLD = 600; // 10:00 — Solo alerta, no desconecta
+    const UPCOMING_OFFLINE_EXTENDED_THRESHOLD = 600; // 0:10:00
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           AUTO-OFFLINE STATES                                ║
     // ║  States where the bot will automatically disconnect agents   ║
@@ -1117,7 +1182,7 @@ initializeWebhooks().then(function(ready) {
     // ║  States NOT listed here are alert-only (no state change).   ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-    const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];
+    const AUTO_OFFLINE_STATES = ['Missed', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'Email', 'UpcomingOffline'];   // editable list (not in the Excel)
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║     NO DISCONNECT AGENTS — Alert Only, No Auto-Offline      ║
@@ -1126,15 +1191,322 @@ initializeWebhooks().then(function(ready) {
     // ║  alert to the OM when the threshold is exceeded.            ║
     // ╚══════════════════════════════════════════════════════════════╝
 
-    const NO_DISCONNECT_AGENTS = [
+    const NO_DISCONNECT_AGENTS = [   // editable list (not in the Excel): add or remove here
         'calvotga',
         'kevcsti',
         'solacind',
         'ylopezar',
         'zssegura'
-        // Add more logins here as needed
     ];
 
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║   v0.9.3.17: CONFIG CONSISTENCY                               ║
+    // ╚══════════════════════════════════════════════════════════════╝
+    const HD_CB_SHEET = atob('VGhyZXNob2xkcw==');
+    const HD_CB_CACHE_KEY = 'cached_cfgb_v1';
+    const HD_REQUIRED_AUX = ['Available', 'Meeting', 'Training', 'Project', 'Missed', 'Email', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'On Contact', 'UpcomingOffline'];
+    const HD_SCALARS = ['PWD_BREAK_THRESHOLD', 'ACCOMMODATION_BREAK1_THRESHOLD', 'ACCOMMODATION_BREAK2_THRESHOLD', 'ACCOMMODATION_BREAK3_THRESHOLD',
+        'ACCOMMODATION_PERSONAL_THRESHOLD', 'NEW_HIRE_ON_CONTACT_THRESHOLD', 'EMAIL_EXTENDED_THRESHOLD', 'UPCOMING_OFFLINE_EXTENDED_THRESHOLD'];
+    const HD_LISTS_IN_SCRIPT = ['NEW_HIRE_TMS', 'EMAIL_EXTENDED_TMS', 'UPCOMING_OFFLINE_EXTENDED_TMS', 'AUTO_OFFLINE_STATES', 'NO_DISCONNECT_AGENTS'];
+    const HD_OPERATION = { OPERATION_START_HOUR: ['startHour', 23], OPERATION_START_MINUTE: ['startMinute', 59], OPERATION_END_HOUR: ['endHour', 23],
+        OPERATION_END_MINUTE: ['endMinute', 59], OPERATION_GRACE_MINUTES: ['graceMinutes', 240] };
+    // HD-CORE-BEGIN
+    function hdCanon(v) {
+        if (Array.isArray(v)) return '[' + v.map(hdCanon).sort().join(',') + ']';
+        if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + hdCanon(v[k]); }).join(',') + '}';
+        return JSON.stringify(v);
+    }
+    function hdHash(str) {
+        let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+        for (let i = 0; i < str.length; i++) {
+            const ch = str.charCodeAt(i);
+            h1 = Math.imul(h1 ^ ch, 2654435761);
+            h2 = Math.imul(h2 ^ ch, 1597334677);
+        }
+        h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+        h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+        h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+        h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+        return 'HD-' + (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0').toUpperCase();
+    }
+    function hdIntegrityParts() {
+        const o = { AUX_THRESHOLDS: AUX_THRESHOLDS, OPERATION_HOURS: OPERATION_HOURS };
+        o.PWD_BREAK_THRESHOLD = PWD_BREAK_THRESHOLD;
+        o.ACCOMMODATION_BREAK1_THRESHOLD = ACCOMMODATION_BREAK1_THRESHOLD;
+        o.ACCOMMODATION_BREAK2_THRESHOLD = ACCOMMODATION_BREAK2_THRESHOLD;
+        o.ACCOMMODATION_BREAK3_THRESHOLD = ACCOMMODATION_BREAK3_THRESHOLD;
+        o.ACCOMMODATION_PERSONAL_THRESHOLD = ACCOMMODATION_PERSONAL_THRESHOLD;
+        o.NEW_HIRE_ON_CONTACT_THRESHOLD = NEW_HIRE_ON_CONTACT_THRESHOLD;
+        o.EMAIL_EXTENDED_THRESHOLD = EMAIL_EXTENDED_THRESHOLD;
+        o.UPCOMING_OFFLINE_EXTENDED_THRESHOLD = UPCOMING_OFFLINE_EXTENDED_THRESHOLD;
+        return o;
+    }
+    function hdComputeFrom(values) {
+        const parts = {};
+        Object.keys(values).forEach(function (k) { parts[k] = hdHash(k + '=' + hdCanon(values[k])); });
+        return { total: hdHash(hdCanon(values)), parts: parts, values: values };
+    }
+    function hdIntegrityCompute() { return hdComputeFrom(hdIntegrityParts()); }
+    // seconds from a cell: 915 | "915" | "15:15" (m:ss) | "0:15:15" (h:mm:ss) | Excel time value (fraction of a day)
+    function hdSeconds(v) {
+        if (typeof v === 'number') {
+            if (v > 0 && v < 1) return Math.round(v * 86400);
+            return Number.isInteger(v) && v >= 0 && v <= 172800 ? v : null;
+        }
+        const t = String(v == null ? '' : v).trim();
+        if (/^\d+$/.test(t)) { const n = parseInt(t, 10); return n <= 172800 ? n : null; }
+        const m = t.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
+        if (!m) return null;
+        return m[3] !== undefined ? (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) : (+m[1]) * 60 + (+m[2]);
+    }
+    function hdParseCfgRows(rows) {
+        const aux = {}, op = {}, sc = {}, errors = [], seen = {};
+        for (let i = 0; i < rows.length; i++) {
+            const key = String(rows[i][0] == null ? '' : rows[i][0]).trim();
+            const raw = rows[i][1];
+            if (!key || key === 'Setting' || key.charAt(0) === '#') continue;
+            const where = ' (fila ' + (i + 1) + ')';
+            if (HD_LISTS_IN_SCRIPT.indexOf(key) >= 0) continue;
+            if (seen[key]) { errors.push(key + ' repetido' + where); continue; }
+            seen[key] = true;
+            if (key.indexOf('AUX_') === 0) {
+                const sec = hdSeconds(raw);
+                if (sec === null) errors.push(key + ': valor inválido "' + raw + '"' + where); else aux[key.substring(4)] = sec;
+            } else if (HD_OPERATION[key]) {
+                const n = typeof raw === 'number' ? raw : (/^\d+$/.test(String(raw).trim()) ? parseInt(String(raw).trim(), 10) : NaN);
+                if (!Number.isInteger(n) || n < 0 || n > HD_OPERATION[key][1]) errors.push(key + ': valor inválido "' + raw + '"' + where); else op[HD_OPERATION[key][0]] = n;
+            } else if (HD_SCALARS.indexOf(key) >= 0) {
+                const sec = hdSeconds(raw);
+                if (sec === null) errors.push(key + ': valor inválido "' + raw + '"' + where); else sc[key] = sec;
+            } else {
+                errors.push('clave desconocida "' + key + '"' + where);
+            }
+        }
+        HD_REQUIRED_AUX.forEach(function (k) { if (!(k in aux) && !errors.some(function (e) { return e.indexOf('AUX_' + k + ':') === 0; })) errors.push('falta AUX_' + k); });
+        Object.keys(HD_OPERATION).forEach(function (k) { if (!(HD_OPERATION[k][0] in op) && !seen[k]) errors.push('falta ' + k); });
+        HD_SCALARS.forEach(function (k) { if (!(k in sc) && !seen[k]) errors.push('falta ' + k); });
+        if (errors.length) return { errors: errors };
+        const values = { AUX_THRESHOLDS: aux, OPERATION_HOURS: op };
+        HD_SCALARS.forEach(function (k) { values[k] = sc[k]; });
+        return { values: values };
+    }
+    // HD-CORE-END
+
+    var hdRefReady = false, hdRefSource = '', hdRef = null, hdCfgErrKey = '';
+    var hdIntegrityBlocked = false, hdIntegrityAlertedKey = '', hdIntegrityBar = null, hdBarMode = '';
+    function hdDeepFreeze(o) { if (o && typeof o === 'object') { Object.keys(o).forEach(function (k) { hdDeepFreeze(o[k]); }); Object.freeze(o); } return o; }
+    function hdSetRef(values, source) {
+        const v = JSON.parse(JSON.stringify(values));
+        hdRef = hdComputeFrom(v);
+        hdRefReady = true; hdRefSource = source;
+        if (source === 'Excel') GM_setValue(HD_CB_CACHE_KEY, JSON.stringify({ v: v, s: hdHash('hd-cb-v1|' + hdCanon(v)) }));
+    }
+    // called with the parsed workbook; never throws (a bad sheet must not break the webhook load)
+    function hdLoadCfgB(workbook) {
+        try {
+            if (!workbook.Sheets[HD_CB_SHEET]) { hdCfgProblem(['no existe la hoja de referencia "' + HD_CB_SHEET + '"']); return false; }
+            const res = hdParseCfgRows(XLSX.utils.sheet_to_json(workbook.Sheets[HD_CB_SHEET], { header: 1, defval: '' }));
+            if (res.errors) { hdCfgProblem(res.errors); return false; }
+            hdCfgErrKey = '';
+            hdSetRef(res.values, 'Excel');
+            setTimeout(function () { hdIntegrityCheck('excel'); }, 0);   // v0.9.3.17b: check right away, do not wait for the 60 s timer
+            return true;
+        } catch (e) {
+            hdCfgProblem(['error leyendo la hoja de referencia: ' + (e && e.message ? e.message : e)]);
+            return false;
+        }
+    }
+    function hdLoadRefCache() {
+        if (hdRefReady) return true;
+        try {
+            const c = JSON.parse(GM_getValue(HD_CB_CACHE_KEY, '') || 'null');
+            if (!c || !c.v) return false;
+            if (c.s !== hdHash('hd-cb-v1|' + hdCanon(c.v))) {
+                GM_setValue(HD_CB_CACHE_KEY, '');
+                hdSendAdminAlert('cache', '\u{26D4} **Heimdall Compliance Alert: copia local de la referencia alterada**',
+                    'La copia de la referencia guardada en Tampermonkey fue modificada a mano. Se descartó; el bot espera el Excel.');
+                return false;
+            }
+            hdSetRef(c.v, 'copia local');
+            return true;
+        } catch (e) { return false; }
+    }
+    function hdCfgProblem(errors) {
+        const key = errors.join('|');
+        uiWarn('\u{26A0}\u{FE0F} Webhook config error (HD-2). Contact your POC.', 'hd-cfg-err');
+        if (hdCfgErrKey === key) return;
+        hdCfgErrKey = key;
+        hdSendAdminAlert('sheet|' + key, '\u{26A0}\u{FE0F} **Heimdall: hoja de referencia del Excel con errores**',
+            errors.map(function (e) { return '- ' + e; }).join('\n') + '\n\n' + (hdRefReady ? 'El bot sigue con la referencia anterior (' + hdRefSource + ').' : 'El bot no puede iniciar hasta que se corrija.'));
+    }
+    function hdShowBanner(mode) {
+        if (!mode) { if (hdIntegrityBar) { hdIntegrityBar.remove(); hdIntegrityBar = null; } hdBarMode = ''; return; }
+        if (hdIntegrityBar && hdBarMode === mode && document.body.contains(hdIntegrityBar)) return;
+        if (hdIntegrityBar) hdIntegrityBar.remove();
+        hdBarMode = mode;
+        hdIntegrityBar = document.createElement('div');
+        const red = mode === 'compliance';
+        hdIntegrityBar.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; z-index: 2147483647; color: #fff; font: bold 15px Arial, sans-serif; ' +
+            'padding: 12px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.4); ' + (red ? 'background: #c62828; border-bottom: 3px solid #7f0000;' : 'background: #e67e22; border-bottom: 3px solid #a04000;');
+        hdIntegrityBar.innerHTML = red
+            ? '\u{26D4} COMPLIANCE ALERT: This script was modified without authorization. Please update it from the official source and avoid editing it.' +
+              '<div style="font-size: 12px; font-weight: normal; margin-top: 4px;">Heimdall is blocked and cannot be started. The administrator has been notified.</div>'
+            : '\u{23F3} Loading the Heimdall webhooks...' +
+              '<div style="font-size: 12px; font-weight: normal; margin-top: 4px;">If this takes more than a minute, open the Heimdall Webhook Config Excel in SharePoint once. The bot can start once the webhooks are loaded.</div>';
+        document.body.appendChild(hdIntegrityBar);
+    }
+    // v0.9.3.17b: the alert is sent the moment the problem is detected.
+    // - uses the webhook saved from the last Excel load if the Excel is not loaded yet
+    // - the alert is kept in Tampermonkey storage until the webhook confirms it (retry every 15 s, and on the next CAMP load)
+    // - if the tab is closed while it is still pending, a last attempt goes out with sendBeacon
+    var HD_ALERT_PENDING_KEY = 'hd_alert_pending_v1';
+    var _hdAlertSending = false, _hdAlertRetryT = null;
+    function hdAlertUrl() {
+        return LOG_WEBHOOK_URL || MOVEMENTS_WEBHOOK || GM_getValue('cached_LOG_WEBHOOK_URL', '') || GM_getValue('cached_MOVEMENTS_WEBHOOK', '');
+    }
+    function hdPendingAlert() {
+        try { const p = JSON.parse(GM_getValue(HD_ALERT_PENDING_KEY, '') || 'null'); return p && p.content ? p : null; } catch (e) { return null; }
+    }
+    function hdFlushAlert() {
+        const p = hdPendingAlert();
+        if (!p || _hdAlertSending) return;
+        const url = hdAlertUrl();
+        if (!url) { hdRetryAlertSoon(); return; }
+        _hdAlertSending = true;
+        gmRequest({
+            method: 'POST', url: url,
+            headers: { 'Content-Type': 'application/json' },
+            data: JSON.stringify({ Content: p.content }),
+            timeout: 15000,
+            onload: function (r) {
+                _hdAlertSending = false;
+                if (r.status < 300) {
+                    GM_setValue('hd_integrity_alert_v1', JSON.stringify({ key: p.key, ts: Date.now() }));
+                    const now = hdPendingAlert();
+                    if (now && now.key === p.key) GM_setValue(HD_ALERT_PENDING_KEY, '');
+                } else hdRetryAlertSoon();
+            },
+            onerror: function () { _hdAlertSending = false; hdRetryAlertSoon(); },
+            ontimeout: function () { _hdAlertSending = false; hdRetryAlertSoon(); }
+        });
+    }
+    function hdRetryAlertSoon() {
+        if (_hdAlertRetryT) return;
+        _hdAlertRetryT = setTimeout(function () { _hdAlertRetryT = null; hdFlushAlert(); }, 15000);
+    }
+    function hdBeaconAlert() {
+        const p = hdPendingAlert(), url = hdAlertUrl();
+        if (!p || !url || !navigator.sendBeacon) return;
+        try { navigator.sendBeacon(url, new Blob([JSON.stringify({ Content: p.content })], { type: 'text/plain;charset=UTF-8' })); } catch (e) { /* best effort */ }
+    }
+    window.addEventListener('pagehide', hdBeaconAlert);
+    window.addEventListener('beforeunload', hdBeaconAlert);
+    function hdSendAdminAlert(key, title, body) {
+        if (hdIntegrityAlertedKey === key) { hdFlushAlert(); return; }
+        try {
+            const last = JSON.parse(GM_getValue('hd_integrity_alert_v1', '{}') || '{}');
+            if (last.key === key && Date.now() - (last.ts || 0) < 30 * 60 * 1000) { hdIntegrityAlertedKey = key; return; }   // same alert already delivered < 30 min ago
+        } catch (e) { /* bad value: send */ }
+        const pend = hdPendingAlert();
+        hdIntegrityAlertedKey = key;
+        if (!(pend && pend.key === key)) {
+            let bot = 'Heimdall', ver = '';
+            try { bot = GM_info.script.name; ver = GM_info.script.version; } catch (e) { /* GM_info not available */ }
+            const content = '/md\n' + title + '\n\n**Bot:** ' + bot + (ver ? ' v' + ver : '') + '\n**Operador:** ' + (BOT_OPERATOR || '(sin login)') +
+                '\n**Hora:** ' + new Date().toLocaleString() + '\n\n' + body;
+            GM_setValue(HD_ALERT_PENDING_KEY, JSON.stringify({ key: key, content: content, ts: Date.now() }));
+        }
+        hdFlushAlert();
+    }
+    function hdBlock(msg) {
+        if (isMonitoring) {
+            isMonitoring = false;
+            if (monitoringTimeout) { clearWorkerTimeout(monitoringTimeout); monitoringTimeout = null; }
+            addStatusMessage('\u{1F6D1} Monitoring stopped: ' + msg);
+        }
+        startBtn.disabled = true;
+        pauseBtn.disabled = true;
+    }
+    // "script value -> reference value" for each altered entry (admin alert only)
+    function hdDiffLines(cur, ref) {
+        const out = [];
+        Object.keys(Object.assign({}, cur.values, ref.values)).forEach(function (k) {
+            if (cur.parts[k] === ref.parts[k]) return;
+            const a = cur.values[k], b = ref.values[k];
+            if (a && b && typeof a === 'object' && typeof b === 'object') {
+                Object.keys(Object.assign({}, a, b)).forEach(function (s) {
+                    if (a[s] !== b[s]) out.push('- **' + k + ' / ' + s + '**: script `' + a[s] + '` vs Excel `' + b[s] + '`');
+                });
+            } else out.push('- **' + k + '**: script `' + JSON.stringify(a) + '` vs Excel `' + JSON.stringify(b) + '`');
+        });
+        return out.length ? out.join('\n') : '- (sin detalle)';
+    }
+    // true = hardcoded values match the reference: the bot may start
+    function hdIntegrityCheck(trigger) {
+        if (!hdRefReady) {
+            hdShowBanner('waiting');
+            hdBlock('webhooks not loaded');
+            if (trigger !== 'periodic') uiWarn('\u{23F3} Loading webhooks... the bot can start once they are loaded', 'hd-wait');
+            return false;
+        }
+        let cur = null;
+        try { cur = hdIntegrityCompute(); } catch (e) { cur = null; }
+        if (cur && cur.total === hdRef.total) {
+            if (hdIntegrityBlocked || hdBarMode) {
+                hdIntegrityBlocked = false;
+                hdShowBanner('');
+                if (!isMonitoring) startBtn.disabled = false;
+                addStatusMessage('\u{2705} Webhooks loaded: Heimdall ready');
+            }
+            return true;
+        }
+        if (!hdIntegrityBlocked) {
+            hdIntegrityBlocked = true;
+            addStatusMessage('\u{26D4} COMPLIANCE: unauthorized modification detected, monitoring blocked');
+        }
+        hdBlock('compliance check');
+        hdShowBanner('compliance');
+        hdSendAdminAlert('edit|' + (cur ? cur.total : 'x') + '|' + hdRef.total, '\u{26D4} **Heimdall Compliance Alert: código del bot adulterado sin autorización**',
+            'Los umbrales del script no coinciden con la referencia (' + hdRefSource + ').\n\n**Valores alterados:**\n' + (cur ? hdDiffLines(cur, hdRef) : '- (no se pudo calcular)') +
+            '\n\nEl bot quedó bloqueado (no puede iniciar).');
+        return false;
+    }
+
+    // v0.9.3.17: allowed operators = Team Member column of TEAM WEBHOOKS in the webhook Excel
+    function hdOperatorAllowed(login) {
+        login = String(login || '').trim().toLowerCase();
+        return !!login && TEAM_MEMBERS.indexOf(login) >= 0;
+    }
+    function hdNotListedMsg(login) {
+        return 'The login "' + login + '" is not in the Heimdall Bot database. Please verify that it is spelled correctly or contact your POC.';
+    }
+    // HD-ASK-OPERATOR-BEGIN
+    var _hdAsking = false;
+    function hdBotLabel() { try { return GM_info.script.name + ' v' + GM_info.script.version; } catch (e) { return 'Heimdall'; } }
+    function hdAskOperator() {
+        if (_hdAsking || hdOperatorAllowed(BOT_OPERATOR)) return;
+        if (!TEAM_MEMBERS.length) { uiWarn('\u{23F3} Waiting for the Heimdall Excel to verify the operator login...', 'hd-op-wait'); return; }
+        _hdAsking = true;
+        try {
+            while (true) {
+                const v = (prompt(hdBotLabel() + ': enter your login to start the bot:') || '').trim().toLowerCase();
+                if (!v) { alert('You must enter your login to use the bot.'); continue; }
+                if (!hdOperatorAllowed(v)) { alert('\u{26D4} ' + hdNotListedMsg(v)); continue; }
+                BOT_OPERATOR = v;
+                addStatusMessage('\u{1F464} Operator: ' + v);
+                break;
+            }
+        } finally { _hdAsking = false; }
+    }
+    // HD-ASK-OPERATOR-END
+    function hdIntegrityInit() {
+        hdDeepFreeze(AUX_THRESHOLDS); hdDeepFreeze(OPERATION_HOURS);
+        hdFlushAlert();   // v0.9.3.17b: an alert left pending by a closed tab goes out now
+        hdLoadRefCache();
+        hdIntegrityCheck('load');
+        setInterval(function () { hdIntegrityCheck('periodic'); if (!BOT_OPERATOR && webhooksLoaded) hdAskOperator(); }, 60 * 1000);
+    }
 
     // ╔══════════════════════════════════════════════════════════════╗
     // ║           SESSION VARIABLES                                  ║
@@ -1917,6 +2289,7 @@ ${rows}`;
 
     async function monitoringCycle() {
         if (!isMonitoring) return;
+        if (!hdIntegrityCheck('cycle')) return;   // v0.9.3.17: compliance block
         const myGen = ++cycleGen;
         cycleInProgress = true;
         lastActivityAt = Date.now();
@@ -2053,7 +2426,7 @@ ${rows}`;
         const refreshStoppedEl = document.querySelector('div.awsui_child_18582_66aol_97 a.awsui_disabled_vjswe_10957_198');
         const refreshStoppedByText = refreshStoppedEl && refreshStoppedEl.textContent.trim().includes('Refresh Stopped');
         const isRefreshStopped = refreshStoppedEl && refreshStoppedByText;
-        // v0.9.3.16: quick fix first. Click CAMP's "Submit" and wait for "Next Refresh in: N seconds".
+        // v0.9.3.17: quick fix first. Click CAMP's "Submit" and wait for "Next Refresh in: N seconds".
         function rsFindSubmit() {
             const vis = function (e) { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
             const all = Array.from(document.querySelectorAll('a, button')).filter(function (e) { return e.textContent.trim() === 'Submit' && vis(e); });
@@ -2482,7 +2855,7 @@ ${rows}`;
     }
 
 
-    // ===== v0.9.3.16: CHIME MENTIONS (@operator @team, no longer All Members) =====
+    // ===== v0.9.3.17: CHIME MENTIONS (@operator @team, no longer All Members) =====
     function mentionLogin(raw) {
         const v = String(raw || '').trim().toLowerCase().replace(/@amazon.*$/i, '');
         return /^[a-z][a-z0-9]{1,29}$/.test(v) ? v : '';
@@ -2672,6 +3045,8 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
     // ===== EVENT LISTENERS =====
 
     startBtn.addEventListener('click', () => {
+        if (!hdIntegrityCheck('start')) return;   // v0.9.3.17: compliance block
+        if (!hdOperatorAllowed(BOT_OPERATOR)) { addStatusMessage('\u{26A0}\u{FE0F} Enter a valid operator login first'); hdAskOperator(); return; }   // v0.9.3.17
         if (!isMonitoring) {
             isMonitoring = true;
             sessionCounters = { totalDisconnected: 0, totalMovedToAvailable: 0, totalFailed: 0, totalManagerAlerts: 0, totalTeamAlerts: 0, totalUnconfirmed: 0 };
@@ -2685,7 +3060,7 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
             // v0.9.3.12: no heartbeat here; cycle 1 writes it (two parallel CREATEs made duplicate rows)
             startBtn.disabled = true;
             pauseBtn.disabled = false;
-            // v0.9.3.16: 250 rows before the first cycle, so every agent is on one page
+            // v0.9.3.17: 250 rows before the first cycle, so every agent is on one page
             const myToken = ++_rpStartToken;
             rpSet250Rows().catch(function (e) {
                 reportBg('❌ 250 rows error: ' + (e && e.message ? e.message : e), e);
@@ -2707,7 +3082,7 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
         }
     });
 
-    // ===== v0.9.3.16: 250 ROWS AT START (Table Preferences > "250 rows" > Confirm) =====
+    // ===== v0.9.3.17: 250 ROWS AT START (Table Preferences > "250 rows" > Confirm) =====
     var _rpStartToken = 0;
     var RP_ROWS_LABEL = '250 rows';
     function rpSleep(ms) { return delay(ms); }
@@ -2777,6 +3152,7 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
     }
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.16 Developed by yalnunez');
+    addStatusMessage('v0.9.3.17 Developed by yalnunez');
+    hdIntegrityInit();   // v0.9.3.17
 
 })();
