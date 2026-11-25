@@ -1121,6 +1121,7 @@ initializeWebhooks().then(function(ready) {
         'jorgenll',
         'gsamierc',
         'galveesl',
+        'jesusfav',
         'velasher'
     ];
     const EMAIL_EXTENDED_THRESHOLD = 900; // 0:15:00
