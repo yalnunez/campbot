@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         SDS Heimdall bot by yalnunez
 // @namespace    tampermonkey.net/
-// @version      0.9.3.17
+// @version      0.9.3.18
 // @updateURL    https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
 // @downloadURL  https://raw.githubusercontent.com/yalnunez/campbot/main/camp-aux-monitor-vcscol.user.js
-// @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alternating alerts, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh / remote deactivation
+// @description  VCS COL Camp bot - Monitor CAMP AUX durations, send alerts to OM webhooks by team, auto-change state - Sequential AutoClick (3.5s), System/Break/Break2/Break3/Lunch/Personal double-check via dedicated columns, Missed double-check via Missed Contacts column, On Contact alerts every 5 min, AWS UI Cloudscape dropdown fix, Post-dropdown agent verification, Multi-OM webhook routing, BOT_OPERATOR prompt, System Issue manual button, Event logs on close/refresh / remote deactivation, Long Email contact alert (Email-Active Contacts + Email-Contact Duration)
 // @author       @yalnunez
 // @match        https://prod-iad.camp.wwcs.amazon.dev/*
 // @match        https://prod-fra.camp.wwcs.amazon.dev/*
@@ -1203,11 +1203,17 @@ initializeWebhooks().then(function(ready) {
     // ╔══════════════════════════════════════════════════════════════╗
     // ║   v0.9.3.17: CONFIG CONSISTENCY                               ║
     // ╚══════════════════════════════════════════════════════════════╝
+    // v0.9.3.18: long-contact limits (also rows in the Excel 'Thresholds' sheet). Declared here, before any compliance check.
+    const EMAIL_LONG_SINGLE_THRESHOLD = 900;     // 0:15:00 Email-Contact Duration with 1 active Email
+    const EMAIL_LONG_MULTI_THRESHOLD = 1800;     // 0:30:00 Email-Contact Duration with 2+ active Emails
+    const LONG_ALERT_REPEAT_SECONDS = 300;       // 0:05:00 reminder per agent (On Contact + long Email)
     const HD_CB_SHEET = atob('VGhyZXNob2xkcw==');
     const HD_CB_CACHE_KEY = 'cached_cfgb_v1';
     const HD_REQUIRED_AUX = ['Available', 'Meeting', 'Training', 'Project', 'Missed', 'Email', 'Break', 'Break2', 'Break3', 'Personal', 'Lunch', 'System', 'On Contact', 'UpcomingOffline'];
     const HD_SCALARS = ['PWD_BREAK_THRESHOLD', 'ACCOMMODATION_BREAK1_THRESHOLD', 'ACCOMMODATION_BREAK2_THRESHOLD', 'ACCOMMODATION_BREAK3_THRESHOLD',
         'ACCOMMODATION_PERSONAL_THRESHOLD', 'NEW_HIRE_ON_CONTACT_THRESHOLD', 'EMAIL_EXTENDED_THRESHOLD', 'UPCOMING_OFFLINE_EXTENDED_THRESHOLD'];
+    // v0.9.3.18: optional keys: checked only when the Excel has them (so the Excel can be updated after every bot is on .18)
+    const HD_SCALARS_OPT = ['EMAIL_LONG_SINGLE_THRESHOLD', 'EMAIL_LONG_MULTI_THRESHOLD', 'LONG_ALERT_REPEAT_SECONDS'];
     const HD_LISTS_IN_SCRIPT = ['NEW_HIRE_TMS', 'EMAIL_EXTENDED_TMS', 'UPCOMING_OFFLINE_EXTENDED_TMS', 'AUTO_OFFLINE_STATES', 'NO_DISCONNECT_AGENTS'];
     const HD_OPERATION = { OPERATION_START_HOUR: ['startHour', 23], OPERATION_START_MINUTE: ['startMinute', 59], OPERATION_END_HOUR: ['endHour', 23],
         OPERATION_END_MINUTE: ['endMinute', 59], OPERATION_GRACE_MINUTES: ['graceMinutes', 240] };
@@ -1240,6 +1246,9 @@ initializeWebhooks().then(function(ready) {
         o.NEW_HIRE_ON_CONTACT_THRESHOLD = NEW_HIRE_ON_CONTACT_THRESHOLD;
         o.EMAIL_EXTENDED_THRESHOLD = EMAIL_EXTENDED_THRESHOLD;
         o.UPCOMING_OFFLINE_EXTENDED_THRESHOLD = UPCOMING_OFFLINE_EXTENDED_THRESHOLD;
+        const opt = { EMAIL_LONG_SINGLE_THRESHOLD: EMAIL_LONG_SINGLE_THRESHOLD, EMAIL_LONG_MULTI_THRESHOLD: EMAIL_LONG_MULTI_THRESHOLD, LONG_ALERT_REPEAT_SECONDS: LONG_ALERT_REPEAT_SECONDS };
+        const refV = (typeof hdRef !== 'undefined' && hdRef && hdRef.values) ? hdRef.values : {};
+        Object.keys(opt).forEach(function (k) { if (k in refV) o[k] = opt[k]; });   // v0.9.3.18
         return o;
     }
     function hdComputeFrom(values) {
@@ -1276,7 +1285,7 @@ initializeWebhooks().then(function(ready) {
             } else if (HD_OPERATION[key]) {
                 const n = typeof raw === 'number' ? raw : (/^\d+$/.test(String(raw).trim()) ? parseInt(String(raw).trim(), 10) : NaN);
                 if (!Number.isInteger(n) || n < 0 || n > HD_OPERATION[key][1]) errors.push(key + ': valor inválido "' + raw + '"' + where); else op[HD_OPERATION[key][0]] = n;
-            } else if (HD_SCALARS.indexOf(key) >= 0) {
+            } else if (HD_SCALARS.indexOf(key) >= 0 || HD_SCALARS_OPT.indexOf(key) >= 0) {
                 const sec = hdSeconds(raw);
                 if (sec === null) errors.push(key + ': valor inválido "' + raw + '"' + where); else sc[key] = sec;
             } else {
@@ -1289,6 +1298,7 @@ initializeWebhooks().then(function(ready) {
         if (errors.length) return { errors: errors };
         const values = { AUX_THRESHOLDS: aux, OPERATION_HOURS: op };
         HD_SCALARS.forEach(function (k) { values[k] = sc[k]; });
+        HD_SCALARS_OPT.forEach(function (k) { if (k in sc) values[k] = sc[k]; });
         return { values: values };
     }
     // HD-CORE-END
@@ -1518,8 +1528,9 @@ initializeWebhooks().then(function(ready) {
     let disconnectionLog = [];
 
 
-    // ===== Previous cycle tracking for On Contact alternating =====
-    let previousOnContactAlerted = new Set();
+    // ===== v0.9.3.18: On Contact reminder every 5 min per agent (was: alternating cycles) =====
+    const ON_CONTACT_REPEAT_MS = LONG_ALERT_REPEAT_SECONDS * 1000;
+    let onContactLastAlert = {};   // agent -> ms of last On Contact alert
 
     // ===== Session counters for enhanced log =====
     let sessionCounters = {
@@ -1904,7 +1915,7 @@ ${rows}`;
 
     function findColumnIndexes(table) {
         const headers = table.querySelectorAll('th');
-        let idx = { agent: -1, team: -1, state: -1, duration: -1, profile: -1, outageTime: -1, breakTime: -1, break2Time: -1, break3Time: -1, lunchTime: -1, personalTime: -1, missedContacts: -1 };
+        let idx = { agent: -1, team: -1, state: -1, duration: -1, profile: -1, outageTime: -1, breakTime: -1, break2Time: -1, break3Time: -1, lunchTime: -1, personalTime: -1, missedContacts: -1, emailActive: -1, emailDuration: -1 };
         headers.forEach((cell, i) => {
             const t = extractHeaderText(cell);
             if (t === 'Agent') idx.agent = i;
@@ -1919,6 +1930,8 @@ ${rows}`;
             else if (t === 'Lunch Time') idx.lunchTime = i;
             else if (t === 'Personal Time') idx.personalTime = i;
             else if (t === 'Missed Contacts') idx.missedContacts = i;
+            else if (t === 'Email-Active Contacts') idx.emailActive = i;      // v0.9.3.18
+            else if (t === 'Email-Contact Duration') idx.emailDuration = i;   // v0.9.3.18
         });
         if (idx.agent === -1 || idx.team === -1 || idx.state === -1 || idx.duration === -1 || idx.profile === -1) {
             headers.forEach((cell, i) => {
@@ -1926,7 +1939,7 @@ ${rows}`;
                 if (idx.agent === -1 && raw.includes('Agent')) idx.agent = i;
                 else if (idx.team === -1 && raw.includes('Team')) idx.team = i;
                 else if (idx.state === -1 && raw.includes('State')) idx.state = i;
-                else if (idx.duration === -1 && raw.includes('Duration')) idx.duration = i;
+                else if (idx.duration === -1 && raw.includes('Duration') && !raw.includes('Contact Duration')) idx.duration = i;
                 else if (idx.profile === -1 && raw.includes('Profile')) idx.profile = i;
                 else if (idx.outageTime === -1 && raw.includes('Outage Time')) idx.outageTime = i;
                 else if (idx.breakTime === -1 && raw.includes('Break Time')) idx.breakTime = i;
@@ -2540,6 +2553,13 @@ ${rows}`;
         let availableAlerts = [];
         let stateChangeQueue = [];
         let currentOnContactViolations = new Set();
+        let emailLongAlerts = [];              // v0.9.3.18
+        const emailLongSeen = new Set();       // v0.9.3.18: agents currently over the Email limit
+        const emailColsOk = idx.emailActive !== -1 && idx.emailDuration !== -1;
+        if (!emailColsOk && !emailLongColsWarned) {
+            emailLongColsWarned = true;
+            uiWarn('\u{26A0}\u{FE0F} Columns "Email-Active Contacts" / "Email-Contact Duration" not found in CAMP: long Email alert is OFF (add both columns to the table)', 'email-long-cols');
+        }
         const rows = table.querySelectorAll('tbody tr');
 
         rows.forEach(row => {
@@ -2552,6 +2572,21 @@ ${rows}`;
 
                 let effectiveDuration = duration;
                 let effectiveDurationText = durationText;
+
+                // ===== v0.9.3.18: LONG EMAIL CONTACT (any state, alert only) =====
+                if (emailColsOk && cells.length > Math.max(idx.emailActive, idx.emailDuration)) {
+                    const emActive = parseInt(cells[idx.emailActive].textContent.trim(), 10);
+                    const emText = cells[idx.emailDuration].textContent.trim();
+                    const emLimit = emailLongLimit(emActive, parseTimeToSeconds(emText));
+                    if (emLimit !== null) {
+                        emailLongSeen.add(agentName);
+                        if (Date.now() - (emailLongLastAlert[agentName] || 0) >= EMAIL_LONG_REPEAT_MS) {
+                            emailLongAlerts.push({ agent: agentName, team: cells[idx.team].textContent.trim(), state,
+                                active: emActive, duration: emText, threshold: formatSeconds(emLimit) });
+                        }
+                        debugLog(`${agentName} Email long - Active: ${emActive} | Email-Contact Duration: ${emText} | Limit: ${formatSeconds(emLimit)}`);
+                    }
+                }
 
                 // ===== DOUBLE-CHECK - Compare Duration vs dedicated time column =====
                 // Double-check: System
@@ -2724,6 +2759,15 @@ ${rows}`;
                 }
             }
         });
+        // ===== v0.9.3.18: SEND LONG EMAIL ALERTS =====
+        Object.keys(emailLongLastAlert).forEach(a => { if (!emailLongSeen.has(a)) delete emailLongLastAlert[a]; });   // back under the limit: next long contact alerts at once
+        if (emailLongAlerts.length > 0) {
+            const nowMs = Date.now();
+            emailLongAlerts.forEach(a => { emailLongLastAlert[a.agent] = nowMs; });
+            sendEmailLongAlert(emailLongAlerts);
+            addStatusMessage(`\u{1F4E7} Long Email contact: ${emailLongAlerts.length} agent(s) alerted`);
+        }
+
         // ===== AUTOCLICK PROCESSING =====
 
         if (stateChangeQueue.length > 0 && autoClickEnabled) {
@@ -2794,27 +2838,27 @@ ${rows}`;
             addStatusMessage(`\u{2139}\u{FE0F} ${stateChangeQueue.length} violation(s) - AutoClick OFF`);
         }
 
-        // ===== ON CONTACT ALTERNATING ALERT LOGIC =====
+        // ===== v0.9.3.18: ON CONTACT ALERT EVERY 5 MIN (replaces alternating cycles) =====
+        // First alert at once; same agent again every ON_CONTACT_REPEAT_MS while still over the limit.
+        // Back under the limit (not in this cycle's violations) -> forgotten, next long contact alerts at once.
         let filteredAlerts = [];
-        let newOnContactAlerted = new Set();
+        const ocNow = Date.now();
+        Object.keys(onContactLastAlert).forEach(a => { if (!currentOnContactViolations.has(a)) delete onContactLastAlert[a]; });
 
         for (const alert of allAlerts) {
             if (alert.state === 'On Contact') {
-                if (previousOnContactAlerted.has(alert.agent)) {
-                    debugLog(`On Contact SKIP: ${alert.agent} (alerted last cycle)`);
+                const last = onContactLastAlert[alert.agent] || 0;
+                if (ocNow - last < ON_CONTACT_REPEAT_MS) {
+                    debugLog(`On Contact SKIP: ${alert.agent} (alerted ${Math.round((ocNow - last) / 1000)}s ago)`);
                     continue;
-                } else {
-                    newOnContactAlerted.add(alert.agent);
-                    filteredAlerts.push(alert);
-                    debugLog(`On Contact SEND: ${alert.agent} (not alerted last cycle)`);
                 }
+                onContactLastAlert[alert.agent] = ocNow;
+                filteredAlerts.push(alert);
+                debugLog(`On Contact SEND: ${alert.agent}`);
             } else {
                 filteredAlerts.push(alert);
             }
         }
-
-        previousOnContactAlerted = newOnContactAlerted;
-        debugLog('Previous On Contact Alerted updated:', [...previousOnContactAlerted]);
 
         // SEND managers alert with filtered alerts
         if (filteredAlerts.length > 0) {
@@ -2822,12 +2866,12 @@ ${rows}`;
             sessionCounters.totalManagerAlerts++;
             const skipped = allAlerts.length - filteredAlerts.length;
             if (skipped > 0) {
-                addStatusMessage(`\u{1F6A8} ${filteredAlerts.length} violation(s) alerted (${skipped} On Contact skipped)`);
+                addStatusMessage(`\u{1F6A8} ${filteredAlerts.length} violation(s) alerted (${skipped} On Contact waiting 5-min reminder)`);
             } else {
                 addStatusMessage(`\u{1F6A8} ${filteredAlerts.length} violation(s) found`);
             }
         } else if (allAlerts.length > 0) {
-            addStatusMessage(`\u{2139}\u{FE0F} ${allAlerts.length} violation(s) - all On Contact skipped (alternating)`);
+            addStatusMessage(`\u{2139}\u{FE0F} ${allAlerts.length} violation(s) - all On Contact waiting 5-min reminder`);
         } else {
             addStatusMessage('\u{2705} No violations');
         }
@@ -2854,6 +2898,50 @@ ${rows}`;
         }
     }
 
+
+    // ===== v0.9.3.18: LONG EMAIL CONTACT ALERT =====
+    // CAMP columns "Email-Active Contacts" + "Email-Contact Duration" (HH:MM:SS). Alert only, never disconnects.
+    //   1 active Email   and duration > 0:15:00  -> alert to the OM webhook
+    //   2+ active Emails and duration > 0:30:00  -> alert to the OM webhook
+    // 0 active is ignored (CAMP shows 00:00:00). Same agent is re-alerted every 5 min while still over the limit.
+    const EMAIL_LONG_REPEAT_MS = LONG_ALERT_REPEAT_SECONDS * 1000;  // reminder interval per agent
+    let emailLongLastAlert = {};                 // agent -> ms of last alert
+    let emailLongColsWarned = false;
+
+    function emailLongLimit(active, seconds) {
+        if (!Number.isInteger(active) || active < 1) return null;
+        const limit = active >= 2 ? EMAIL_LONG_MULTI_THRESHOLD : EMAIL_LONG_SINGLE_THRESHOLD;
+        return seconds > limit ? limit : null;
+    }
+
+    function sendEmailLongAlert(alerts) {
+        const byOM = {};
+        const noOM = [];
+        alerts.forEach(alert => {
+            const om = TM_TO_OM[(alert.team || '').trim().toLowerCase()] || TM_TO_OM[normalizeTeamName(alert.team)];
+            if (om) { (byOM[om] = byOM[om] || []).push(alert); } else { noOM.push(alert); }
+        });
+        const cols = '| Agent | Team | State | Emails activos | Tiempo | Límite |\n|-------|------|-------|----------------|--------|--------|';
+        const rowsOf = list => list.map(a => `| ${a.agent.replace(/@amazon.*$/i, '').trim()} | ${a.team} | ${a.state} | ${a.active} | ${a.duration} | > ${a.threshold} |`).join('\n');
+        const post = (url, text, label) => gmRequest({
+            method: 'POST', url, headers: { 'Content-Type': 'application/json' },
+            data: JSON.stringify({ Content: `/md\n${text}` }),
+            onload: (r) => { addStatusMessage(r.status >= 200 && r.status < 300 ? `\u{1F4E4} Long Email alert sent [${label}]` : `\u{274C} Long Email alert [${label}] HTTP ${r.status}`); },
+            onerror: () => { addStatusMessage(`\u{274C} Long Email alert [${label}] error`); }
+        });
+
+        for (const [om, omAlerts] of Object.entries(byOM)) {
+            const url = MANAGERS_WEBHOOKS[om];
+            if (!url) { uiWarn(`⚠️ No manager webhook for OM "${om}": ${omAlerts.length} long Email alert(s) NOT sent`); continue; }
+            const mentions = buildMentions(omAlerts.map(a => a.team));
+            post(url, `**\u{1F4E7} Alerta: Contacto de Email largo** - ${new Date().toLocaleTimeString()} (Bot: ${BOT_OPERATOR})\n\n${mentions}\nHay contactos de Email largos en los siguientes CSAs (1 email: más de 15 min; 2 o más emails: más de 30 min). Por favor revisen si el CSA necesita apoyo.\n\n${cols}\n${rowsOf(omAlerts)}`, om);
+        }
+        if (noOM.length > 0) {
+            uiWarn(`⚠️ Teams without OM mapping: ${[...new Set(noOM.map(a => a.team))].join(', ')}`);
+            if (!MOVEMENTS_WEBHOOK) { uiWarn(`⚠️ MOVEMENTS_WEBHOOK empty: ${noOM.length} long Email alert(s) NOT sent`); return; }
+            post(MOVEMENTS_WEBHOOK, `**\u{1F4E7} Alerta: Contacto de Email largo (Sin OM asignado)** - ${new Date().toLocaleTimeString()}\n\n${cols}\n${rowsOf(noOM)}`, 'fallback');
+        }
+    }
 
     // ===== v0.9.3.17: CHIME MENTIONS (@operator @team, no longer All Members) =====
     function mentionLogin(raw) {
@@ -3053,7 +3141,8 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
             disconnectionLog = [];
             sessionLogSent = false;
             cycleCount = 0;
-            previousOnContactAlerted = new Set();
+            onContactLastAlert = {};   // v0.9.3.18
+            emailLongLastAlert = {};   // v0.9.3.18
             addStatusMessage('\u{25B6}\u{FE0F} Monitoring started');
             if (!autoClickEnabled) setAutoClick(true); // v0.9.3.13: AutoClick ON by default at Start; the user can turn it OFF afterwards
             if (!debugMode) setDebugMode(true); // v0.9.3.13: Debug ON by default at Start; the user can turn it OFF afterwards
@@ -3152,7 +3241,7 @@ function sendMovementLog(agentLogin, fromState, toState, action, team, duration)
     }
 
     pauseBtn.disabled = true;
-    addStatusMessage('v0.9.3.17 Developed by yalnunez');
+    addStatusMessage('v0.9.3.18 Developed by yalnunez');
     hdIntegrityInit();   // v0.9.3.17
 
 })();
